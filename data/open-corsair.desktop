@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=open-corsair
+Comment=Battery indicator and settings for Corsair wireless headsets
+Exec=open-corsair tray
+Icon=audio-headset
+Terminal=false
+Categories=Utility;
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
