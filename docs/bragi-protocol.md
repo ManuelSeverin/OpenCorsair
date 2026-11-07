@@ -35,8 +35,14 @@ open. open-corsair therefore serialises requests with an flock in
 Property `0x03`: `1` hardware, `2` software, `4` sleep.
 
 - **Reads:** work in hardware mode.
-- **Writes:** set software mode on `08`, then on `09`. Write the property, then
-  restore hardware mode on `09` and then `08`. The settings persist.
+- **Writes:** set software mode on `09` only, write the property, then restore
+  hardware mode on `09`. The settings persist. Do not switch the receiver
+  (`08`) as well.
+- **Mic mute quirk:** each write session resets the headset's mic mute. The
+  mute button is handled inside the headset and is not reported over HID in
+  hardware mode, not even with `92` (key press notifications) enabled. The mute
+  state cannot be read either (`8e`/`a6` are unsupported). open-corsair
+  therefore skips writes when a value is unchanged.
 
 ## Properties
 

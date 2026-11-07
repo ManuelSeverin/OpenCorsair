@@ -142,44 +142,53 @@ class Headset:
     def software_mode(self):
         """Writes are only accepted in software mode; restore hardware mode after.
 
-        Settings written this way stay stored on the headset.
+        Only the headset is switched. Switching the receiver as well resets the
+        headset's mic mute. Settings written this way stay stored on the headset.
         """
         b = self.bragi
         with b.locked():
-            b.set_int(TARGET_RECEIVER, Prop.MODE, Mode.SOFTWARE, 1)
             b.set_int(TARGET_HEADSET, Prop.MODE, Mode.SOFTWARE, 1)
             try:
                 yield
             finally:
                 b.set_int(TARGET_HEADSET, Prop.MODE, Mode.HARDWARE, 1)
-                b.set_int(TARGET_RECEIVER, Prop.MODE, Mode.HARDWARE, 1)
 
-    def write(self, *props: tuple[int, int, int]) -> None:
-        """Write (prop, value, size) tuples to the headset in one session."""
-        with self.software_mode():
-            for prop, value, size in props:
-                self.bragi.set_int(TARGET_HEADSET, prop, value, size)
+    def write(self, *props: tuple[int, int, int]) -> bool:
+        """Write (prop, value, size) tuples to the headset in one session.
 
-    def set_sidetone(self, on: bool, level: int | None = None) -> None:
+        Values that are already set are skipped, because every write session
+        resets the headset's mic mute (firmware behaviour). Returns True if
+        anything was written.
+        """
+        with self.bragi.locked():
+            todo = [(p, v, n) for p, v, n in props if self._get_opt(p, n) != v]
+            if not todo:
+                return False
+            with self.software_mode():
+                for prop, value, size in todo:
+                    self.bragi.set_int(TARGET_HEADSET, prop, value, size)
+            return True
+
+    def set_sidetone(self, on: bool, level: int | None = None) -> bool:
         props = [(Prop.SIDETONE_MUTE, 0 if on else 1, 1)]
         if level is not None:
             props.append((Prop.SIDETONE_LEVEL, max(0, min(100, level)) * 10, 2))
-        self.write(*props)
+        return self.write(*props)
 
-    def set_anc(self, mode: AncMode) -> None:
-        self.write((Prop.ANC, int(mode), 1))
+    def set_anc(self, mode: AncMode) -> bool:
+        return self.write((Prop.ANC, int(mode), 1))
 
-    def set_sleep(self, minutes: int | None) -> None:
+    def set_sleep(self, minutes: int | None) -> bool:
         if minutes:
-            self.write((Prop.SLEEP_ENABLED, 1, 1), (Prop.SLEEP_TIMEOUT_MS, minutes * 60000, 4))
+            return self.write((Prop.SLEEP_ENABLED, 1, 1), (Prop.SLEEP_TIMEOUT_MS, minutes * 60000, 4))
         else:
-            self.write((Prop.SLEEP_ENABLED, 0, 1))
+            return self.write((Prop.SLEEP_ENABLED, 0, 1))
 
-    def set_mic_led(self, on: bool) -> None:
-        self.write((Prop.MIC_LED, 2 if on else 0, 1))
+    def set_mic_led(self, on: bool) -> bool:
+        return self.write((Prop.MIC_LED, 2 if on else 0, 1))
 
-    def set_brightness(self, percent: int) -> None:
-        self.write((Prop.BRIGHTNESS, max(0, min(100, percent)) * 10, 2))
+    def set_brightness(self, percent: int) -> bool:
+        return self.write((Prop.BRIGHTNESS, max(0, min(100, percent)) * 10, 2))
 
     def firmware(self) -> str:
         v = self.bragi.get(TARGET_HEADSET, Prop.FIRMWARE)

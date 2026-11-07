@@ -190,7 +190,14 @@ class Tray:
         if not self.headset:
             return
         try:
-            setter(self.headset, value)
+            if setter(self.headset, value):
+                # firmware quirk: every write session unmutes the microphone
+                self.tray.showMessage(
+                    "Setting changed",
+                    "Note: the headset unmutes the microphone when settings change.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    4000,
+                )
         except OSError:
             self.drop_device("Receiver disconnected")
             return
