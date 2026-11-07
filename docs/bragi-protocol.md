@@ -38,11 +38,17 @@ Property `0x03`: `1` hardware, `2` software, `4` sleep.
 - **Writes:** set software mode on `09` only, write the property, then restore
   hardware mode on `09`. The settings persist. Do not switch the receiver
   (`08`) as well.
-- **Mic mute quirk:** each write session resets the headset's mic mute. The
-  mute button is handled inside the headset and is not reported over HID in
-  hardware mode, not even with `92` (key press notifications) enabled. The mute
-  state cannot be read either (`8e`/`a6` are unsupported). open-corsair
-  therefore skips writes when a value is unchanged.
+- **Mic mute:** in hardware mode the headset handles the mute button itself.
+  Nothing is reported over HID, and the state cannot be read (`8e`/`a6` are
+  unsupported). Every hardware → software → hardware round trip resets that
+  mute.
+- **Software mode:** the headset does *not* mute on its own. It reports the
+  button on report 3 as `03 01 02 01` (press, bit 0 = mic button) and
+  `03 01 02 00` (release). The host must mute the audio source, as iCUE and
+  OpenLinkHub do. Property-change notifications (`03 01 01 <prop> 00
+  <value>`, e.g. battery `0f`) also arrive in this mode.
+- **Keep-alive:** send cmd `12` (`02 09 12`) every few seconds. It answers
+  with status 0. The headset comes back in hardware mode after a power cycle.
 
 ## Properties
 

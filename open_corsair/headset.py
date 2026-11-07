@@ -11,6 +11,7 @@ from .bragi import (
     BatteryStatus,
     Bragi,
     BragiError,
+    Cmd,
     Mode,
     Prop,
 )
@@ -51,18 +52,20 @@ class HeadsetSettings:
     brightness: int | None       # percent
 
 
-def find_receiver() -> tuple[str, str] | None:
-    """Return (hidraw path, model name) of the first supported receiver."""
+def find_receiver() -> tuple[str, str, str] | None:
+    """Return (hidraw path, model name, USB product name) of the first receiver."""
     for info in enumerate_hidraw():
         if info.pid in SUPPORTED and info.usage_page == BRAGI_USAGE_PAGE:
-            return info.path, SUPPORTED[info.pid]
+            return info.path, SUPPORTED[info.pid], info.name
     return None
 
 
 class Headset:
-    def __init__(self, path: str, model: str):
+    def __init__(self, path: str, model: str, usb_name: str = ""):
         self.path = path
         self.model = model
+        # as used in ALSA/PipeWire device names, e.g. "Corsair_CORSAIR_VIRTUOSO_..."
+        self.usb_name = usb_name.replace(" ", "_")
         self.bragi = Bragi(path)
 
     @classmethod
@@ -138,27 +141,52 @@ class Headset:
             brightness=None if bright is None else round(bright / 10),
         )
 
+    # -- operating mode ----------------------------------------------------
+    def mode(self) -> Mode | None:
+        try:
+            return Mode(self.bragi.get_int(TARGET_HEADSET, Prop.MODE, 1))
+        except (BragiError, ValueError):
+            return None
+
+    def enter_software_mode(self) -> None:
+        """Take control of the headset (like iCUE does while it runs).
+
+        In software mode the headset reports its buttons instead of acting on
+        them: the mute button no longer mutes the mic, the host has to do that.
+        Only the headset is switched; the receiver stays in hardware mode.
+        """
+        self.bragi.set_int(TARGET_HEADSET, Prop.MODE, Mode.SOFTWARE, 1)
+
+    def leave_software_mode(self) -> None:
+        self.bragi.set_int(TARGET_HEADSET, Prop.MODE, Mode.HARDWARE, 1)
+
+    def heartbeat(self) -> None:
+        """Keep software mode alive; the headset falls back without host traffic."""
+        self.bragi.request(TARGET_HEADSET, Cmd.HEARTBEAT)
+
     @contextlib.contextmanager
     def software_mode(self):
-        """Writes are only accepted in software mode; restore hardware mode after.
+        """Writes are only accepted in software mode.
 
-        Only the headset is switched. Switching the receiver as well resets the
-        headset's mic mute. Settings written this way stay stored on the headset.
+        If the headset is already in software mode (the tray holds it there),
+        nothing is switched. Otherwise switch temporarily. Note: leaving
+        software mode resets the headset's own mic mute.
         """
-        b = self.bragi
-        with b.locked():
-            b.set_int(TARGET_HEADSET, Prop.MODE, Mode.SOFTWARE, 1)
+        with self.bragi.locked():
+            if self.mode() == Mode.SOFTWARE:
+                yield
+                return
+            self.enter_software_mode()
             try:
                 yield
             finally:
-                b.set_int(TARGET_HEADSET, Prop.MODE, Mode.HARDWARE, 1)
+                self.leave_software_mode()
 
     def write(self, *props: tuple[int, int, int]) -> bool:
         """Write (prop, value, size) tuples to the headset in one session.
 
-        Values that are already set are skipped, because every write session
-        resets the headset's mic mute (firmware behaviour). Returns True if
-        anything was written.
+        Values that are already set are skipped. Returns True if anything was
+        written.
         """
         with self.bragi.locked():
             todo = [(p, v, n) for p, v, n in props if self._get_opt(p, n) != v]

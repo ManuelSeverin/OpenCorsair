@@ -37,6 +37,16 @@ TARGET_HEADSET = 0x09
 class Cmd(enum.IntEnum):
     SET = 0x01
     GET = 0x02
+    HEARTBEAT = 0x12
+
+
+class Event(enum.IntEnum):
+    """Byte 2 of a report-3 notification."""
+    PROPERTY = 0x01   # 03 <src> 01 <prop lo> <prop hi> <value LE...>
+    KEY = 0x02        # 03 <src> 02 <key bitmap>: bit 0 = mic/mute button
+
+
+KEY_MIC = 0x01
 
 
 class Mode(enum.IntEnum):

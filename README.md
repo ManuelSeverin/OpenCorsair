@@ -16,6 +16,7 @@ Supported right now:
 
 - **Tray indicator** showing the battery level, colour-coded, with a
   charging state and a low-battery notification
+- **Mic mute** via the headset button, handled on the host like iCUE does
 - Settings from the tray menu or the command line:
   - noise cancelling: off, on, transparency
   - sidetone: on/off and level
@@ -57,12 +58,23 @@ $ open-corsair set auto-off 10             # off | minutes
 $ open-corsair set mic-led on
 ```
 
-Reading is passive: the headset stays in hardware mode. To write a setting,
-the tool switches the headset to software mode for a moment and
-then back to hardware mode. The headset keeps the setting.
+### How mute works
 
-**Known limitation:** the headset firmware unmutes the microphone whenever a
-setting is written. Re-mute it with the mute button afterwards.
+While the tray runs it keeps the headset in *software mode*, just like iCUE.
+In this mode the headset reports its mute button instead of muting by itself.
+The tray then mutes the headset's microphone in PipeWire, plays two short
+beeps (falling = muted, rising = unmuted) and shows a red badge on the icon.
+Settings can be written in this mode without any mode switch, so changing a
+setting never unmutes the mic.
+
+When the tray quits, it hands the headset back to hardware mode, where the
+mute button works on its own again. A PipeWire mute set by the tray stays in
+place, so a muted mic stays muted. Unmute it in the KDE volume applet if
+needed.
+
+Without the tray running, `open-corsair set …` switches to software mode only
+for the write. The headset firmware resets its own mic mute when it does
+that.
 
 ## Protocol notes
 

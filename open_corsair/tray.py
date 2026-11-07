@@ -19,9 +19,11 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from .bragi import REPORT_EVENT, AncMode, BatteryStatus, BragiError
+from .bragi import KEY_MIC, REPORT_EVENT, AncMode, BatteryStatus, BragiError, Event, Mode
 from .headset import Headset, HeadsetSettings, HeadsetState
+from .mic import MicControl
 
+HEARTBEAT_MS = 5_000
 POLL_MS = 20_000  # the headset sends no events in hardware mode, so poll
 RECONNECT_MS = 5_000
 LOW_BATTERY = 15
@@ -51,7 +53,16 @@ def bolt_path(body: QRectF) -> QPainterPath:
     return path
 
 
-def render_icon(state: HeadsetState | None, fg: QColor) -> QIcon:
+def draw_mute_badge(p: QPainter) -> None:
+    """Red disc with a white bar in the top-left corner: mic muted."""
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#da4453"))
+    p.drawEllipse(QRectF(0, 0, 30, 30))
+    p.setBrush(QColor("white"))
+    p.drawRoundedRect(QRectF(6, 12, 18, 6), 2, 2)
+
+
+def render_icon(state: HeadsetState | None, fg: QColor, muted: bool = False) -> QIcon:
     """Battery glyph with the percentage (or a bolt while charging) inside."""
     size = 64
     pm = QPixmap(size, size)
@@ -90,6 +101,8 @@ def render_icon(state: HeadsetState | None, fg: QColor) -> QIcon:
             p.setPen(pen)
             p.setBrush(fg)
             p.drawPath(bolt)
+            if muted:
+                draw_mute_badge(p)
             p.end()
             return QIcon(pm)
 
@@ -112,6 +125,8 @@ def render_icon(state: HeadsetState | None, fg: QColor) -> QIcon:
         font.setPixelSize(28)
         p.setFont(font)
         p.drawText(body.toRect(), Qt.AlignmentFlag.AlignCenter, "–")
+    if muted and connected:
+        draw_mute_badge(p)
     p.end()
     return QIcon(pm)
 
@@ -122,7 +137,10 @@ class Tray:
         self.headset: Headset | None = None
         self.notifier: QSocketNotifier | None = None
         self.state: HeadsetState | None = None
+        self.mic: MicControl | None = None
+        self.muted = False
         self.warned_low = False
+        self.key_bits = 0
 
         self.tray = QSystemTrayIcon()
         self.menu = QMenu()
@@ -136,6 +154,10 @@ class Tray:
         for a in (self.status_action, self.detail_action):
             self.menu.addAction(a)
         self.menu.addSeparator()
+        self.mute_action = QAction("Microphone muted", self.menu, checkable=True)
+        self.mute_action.triggered.connect(self.set_muted)
+        self.menu.addAction(self.mute_action)
+        self.menu.addSeparator()
         self.settings_menus = self.build_settings_menus()
         self.menu.addSeparator()
         self.menu.addAction(refresh)
@@ -147,6 +169,8 @@ class Tray:
         self.poll = QTimer(interval=POLL_MS, timeout=self.refresh)
         self.reconnect_timer = QTimer(interval=RECONNECT_MS, timeout=self.try_open)
         self.debounce = QTimer(singleShot=True, interval=300, timeout=self.refresh)
+        self.heartbeat_timer = QTimer(interval=HEARTBEAT_MS, timeout=self.heartbeat)
+        app.aboutToQuit.connect(self.shutdown)
 
         self.update_ui()
         self.tray.show()
@@ -190,14 +214,7 @@ class Tray:
         if not self.headset:
             return
         try:
-            if setter(self.headset, value):
-                # firmware quirk: every write session unmutes the microphone
-                self.tray.showMessage(
-                    "Setting changed",
-                    "Note: the headset unmutes the microphone when settings change.",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    4000,
-                )
+            setter(self.headset, value)
         except OSError:
             self.drop_device("Receiver disconnected")
             return
@@ -237,10 +254,12 @@ class Tray:
             self.reconnect_timer.start()
             return
         self.reconnect_timer.stop()
+        self.mic = MicControl(self.headset.usb_name)
         self.headset.bragi.on_event = self.on_event
         self.notifier = QSocketNotifier(self.headset.bragi.fileno(), QSocketNotifier.Type.Read)
         self.notifier.activated.connect(self.on_readable)
         self.poll.start()
+        self.heartbeat_timer.start()
         self.refresh()
 
     def drop_device(self, reason: str) -> None:
@@ -252,6 +271,7 @@ class Tray:
             self.headset.close()
             self.headset = None
         self.poll.stop()
+        self.heartbeat_timer.stop()
         self.set_error(reason)
         self.reconnect_timer.start()
 
@@ -264,8 +284,64 @@ class Tray:
             self.drop_device("Receiver disconnected")
 
     def on_event(self, pkt: bytes) -> None:
-        if pkt[0] == REPORT_EVENT:
+        if pkt[0] != REPORT_EVENT or len(pkt) < 4:
+            return
+        if pkt[2] == Event.KEY:
+            pressed = pkt[3] & ~self.key_bits
+            self.key_bits = pkt[3]
+            if pressed & KEY_MIC:
+                self.toggle_mute()
+        elif pkt[2] == Event.PROPERTY:
             self.debounce.start()
+
+    # -- software mode / mute ---------------------------------------------
+    def ensure_software_mode(self) -> None:
+        """Hold the headset in software mode so settings can be written
+        without mode switches (a mode switch resets the headset's own mute)."""
+        if self.headset and self.headset.mode() not in (Mode.SOFTWARE, None):
+            self.headset.enter_software_mode()
+            self.key_bits = 0
+
+    def heartbeat(self) -> None:
+        if not self.headset or not (self.state and self.state.connected):
+            return
+        try:
+            # also re-takes control quickly after the headset was power-cycled
+            self.ensure_software_mode()
+            self.headset.heartbeat()
+        except OSError:
+            self.drop_device("Receiver disconnected")
+        except BragiError:
+            pass
+
+    def toggle_mute(self) -> None:
+        if self.mic:
+            self.set_muted(not self.muted)
+
+    def set_muted(self, muted: bool) -> None:
+        if self.mic and self.mic.set_muted(muted):
+            self.muted = muted
+        self.update_ui()
+
+    def sync_mute(self) -> None:
+        """Pick up mute changes made elsewhere (e.g. KDE volume applet)."""
+        if self.mic:
+            cur = self.mic.is_muted()
+            if cur is not None:
+                self.muted = cur
+
+    def shutdown(self) -> None:
+        """Hand the headset back to hardware mode on exit.
+
+        The PipeWire mute is left as it is, so a muted mic stays muted.
+        """
+        self.heartbeat_timer.stop()
+        if self.headset:
+            try:
+                if self.headset.is_connected():
+                    self.headset.leave_software_mode()
+            except (OSError, BragiError):
+                pass
 
     def refresh(self) -> None:
         if not self.headset:
@@ -274,12 +350,14 @@ class Tray:
         try:
             self.state = self.headset.read_state()
             if self.state.connected:
+                self.ensure_software_mode()
                 settings = self.headset.read_settings()
         except OSError:
             self.drop_device("Receiver disconnected")
             return
         except BragiError:
             self.state = HeadsetState(connected=False)
+        self.sync_mute()
         self.update_settings_ui(settings)
         self.update_ui()
 
@@ -319,9 +397,13 @@ class Tray:
                 )
                 self.detail_action.setVisible(True)
             self.check_low_battery(st, model)
+        if st.connected and self.muted:
+            text += " · mic muted"
+        self.mute_action.setEnabled(self.mic is not None and self.mic.source() is not None)
+        self.mute_action.setChecked(self.muted)
         self.status_action.setText(text)
         self.tray.setToolTip(text)
-        self.tray.setIcon(render_icon(st, self.fg()))
+        self.tray.setIcon(render_icon(st, self.fg(), self.muted and st.connected))
 
     def check_low_battery(self, st: HeadsetState, model: str) -> None:
         low = st.battery is not None and st.battery <= LOW_BATTERY and not st.on_charger
@@ -339,7 +421,11 @@ def main() -> None:
     app.setApplicationName("open-corsair")
     app.setDesktopFileName("open-corsair")
     app.setQuitOnLastWindowClosed(False)
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    # quit cleanly on Ctrl+C / systemctl stop, so the headset gets handed back
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: app.quit())
+    tick = QTimer(interval=500, timeout=lambda: None)  # let Python see signals
+    tick.start()
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("no system tray available", file=sys.stderr)
     _tray = Tray(app)
