@@ -14,6 +14,7 @@ from PyQt6.QtGui import (
     QIcon,
     QPainter,
     QPainterPath,
+    QPen,
     QPixmap,
 )
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -30,7 +31,7 @@ AUTO_OFF_MINUTES = (5, 10, 15, 30, 60, 90)
 
 def battery_color(pct: float, charging: bool) -> QColor:
     if charging:
-        return QColor("#3daee9")
+        return QColor("#27ae60") if pct >= 99 else QColor("#3daee9")
     if pct <= 10:
         return QColor("#da4453")
     if pct <= 33:
@@ -38,8 +39,20 @@ def battery_color(pct: float, charging: bool) -> QColor:
     return QColor("#27ae60")
 
 
+def bolt_path(body: QRectF) -> QPainterPath:
+    """Lightning bolt centred in the battery body."""
+    cx, cy, h = body.center().x(), body.center().y(), body.height() * 0.92
+    pts = [(0.12, -0.5), (-0.30, 0.06), (-0.02, 0.06), (-0.12, 0.5), (0.30, -0.08), (0.02, -0.08)]
+    path = QPainterPath()
+    path.moveTo(cx + pts[0][0] * h, cy + pts[0][1] * h)
+    for x, y in pts[1:]:
+        path.lineTo(cx + x * h, cy + y * h)
+    path.closeSubpath()
+    return path
+
+
 def render_icon(state: HeadsetState | None, fg: QColor) -> QIcon:
-    """Battery glyph with the percentage written inside."""
+    """Battery glyph with the percentage (or a bolt while charging) inside."""
     size = 64
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
@@ -66,17 +79,27 @@ def render_icon(state: HeadsetState | None, fg: QColor) -> QIcon:
         pct = max(0.0, min(100.0, state.battery))
         fill = body.adjusted(7, 7, -7, -7)
         fill.setWidth(fill.width() * pct / 100)
-        p.setBrush(battery_color(pct, state.charging))
+        p.setBrush(battery_color(pct, state.on_charger))
         p.drawRoundedRect(fill, 2, 2)
+        halo = QColor("black") if fg.lightness() > 128 else QColor("white")
 
-        text = "⚡" if state.status == BatteryStatus.CHARGING and pct >= 99 else f"{pct:.0f}"
+        if state.on_charger:
+            bolt = bolt_path(body)
+            pen = QPen(halo, 3)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.setBrush(fg)
+            p.drawPath(bolt)
+            p.end()
+            return QIcon(pm)
+
+        text = f"{pct:.0f}"
         font = QFont()
         font.setBold(True)
         font.setPixelSize(36 if len(text) < 3 else 27)
         p.setFont(font)
         # draw text with a contrasting halo so it stays readable on the fill
         rect = body.toRect()
-        halo = QColor("black") if fg.lightness() > 128 else QColor("white")
         p.setPen(halo)
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             p.drawText(rect.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, text)
@@ -277,7 +300,7 @@ class Tray:
             self.detail_action.setVisible(False)
             self.warned_low = False
         else:
-            status = {
+            status = "charging" if st.on_charger and st.status != BatteryStatus.FULL else {
                 BatteryStatus.CHARGING: "charging",
                 BatteryStatus.DISCHARGING: "on battery",
                 BatteryStatus.FULL: "fully charged",
@@ -294,7 +317,7 @@ class Tray:
         self.tray.setIcon(render_icon(st, self.fg()))
 
     def check_low_battery(self, st: HeadsetState, model: str) -> None:
-        low = st.battery is not None and st.battery <= LOW_BATTERY and not st.charging
+        low = st.battery is not None and st.battery <= LOW_BATTERY and not st.on_charger
         if low and not self.warned_low:
             self.tray.showMessage(
                 "Headset battery low",

@@ -29,10 +29,16 @@ class HeadsetState:
     battery: float | None = None          # percent
     status: BatteryStatus = BatteryStatus.UNKNOWN
     voltage_mv: int | None = None
+    external_power: bool = False
 
     @property
     def charging(self) -> bool:
         return self.status == BatteryStatus.CHARGING
+
+    @property
+    def on_charger(self) -> bool:
+        """Charging, or full while still plugged in."""
+        return self.charging or self.external_power or self.status == BatteryStatus.FULL
 
 
 @dataclass
@@ -103,7 +109,11 @@ class Headset:
             mv = b.get_int(TARGET_HEADSET, Prop.BATTERY_MV, 2)
         except BragiError:
             mv = None
-        return HeadsetState(True, level, status, mv)
+        try:
+            ext = b.get_int(TARGET_HEADSET, Prop.EXTERNAL_POWER, 1) != 0
+        except BragiError:
+            ext = False
+        return HeadsetState(True, level, status, mv, ext)
 
     # -- settings --------------------------------------------------------
     def _get_opt(self, prop: int, size: int = 4) -> int | None:

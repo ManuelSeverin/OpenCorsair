@@ -58,6 +58,7 @@ class Prop(enum.IntEnum):
     CONNECTION = 0x36        # receiver: bitmap of connected sub-devices (bit 1 = headset)
     SIDETONE_MUTE = 0x46     # inverted: 0 = sidetone on, 1 = off
     SIDETONE_LEVEL = 0x47    # 0..1000
+    EXTERNAL_POWER = 0x48    # u8, non-zero while a charger is connected
     BATTERY_MV = 0x53
     MIC_MUTE = 0xA6
     ANC = 0xD1               # see AncMode
