@@ -58,7 +58,7 @@ $ open-corsair set mic-led on
 ```
 
 Reading is passive: the headset stays in hardware mode. To write a setting,
-the tool switches the receiver and headset to software mode for a moment and
+the tool switches the headset to software mode for a moment and
 then back to hardware mode. The headset keeps the setting.
 
 **Known limitation:** the headset firmware unmutes the microphone whenever a
