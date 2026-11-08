@@ -27,7 +27,7 @@ reply:   01 <source> <cmd> <status> [value LE…]
 - **status:** `00` ok, `01` invalid value, `03` failed (for example writing in hardware mode), `05` unsupported, `09` refused.
 
 Replies carry no request id and go to every process that has the hidraw node
-open. open-corsair therefore serialises requests with an flock in
+open. OpenCorsair therefore serialises requests with an flock in
 `$XDG_RUNTIME_DIR`.
 
 ## Modes
@@ -49,7 +49,7 @@ Property `0x03`: `1` hardware, `2` software, `4` sleep.
   <value>`, e.g. battery `0f`) also arrive in this mode.
 - **Keep-alive:** cmd `12` (`02 09 12`) answers with status 0, but iCUE only
   pings devices whose manifest has a `RequiredPingInterval`, which the
-  Virtuoso MAX does not have. open-corsair does not ping either. It re-checks
+  Virtuoso MAX does not have. OpenCorsair does not ping either. It re-checks
   the mode once a minute, because the headset comes back in hardware mode
   after a power cycle.
 - iCUE does the same: it enters software mode once, mutes the OS capture

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-corsair"
-version = "0.1.0"
+version = "0.2.0"
 description = "Linux userspace driver and tray indicator for Corsair (Bragi) wireless headsets"
 readme = "README.md"
 requires-python = ">=3.10"

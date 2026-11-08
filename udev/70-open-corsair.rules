@@ -1,2 +1,2 @@
-# open-corsair: give the logged-in user access to Corsair HID devices (hidraw)
+# OpenCorsair: give the logged-in user access to Corsair HID devices (hidraw)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1b1c", TAG+="uaccess"

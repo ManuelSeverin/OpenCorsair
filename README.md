@@ -1,6 +1,6 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# open-corsair
+# OpenCorsair
 
 Linux userspace driver for Corsair wireless headsets that use Corsair's
 "Bragi" HID protocol. It talks to the USB receiver directly through
@@ -28,9 +28,9 @@ Supported right now:
 
 ### AppImage (recommended)
 
-1. Download `open-corsair-<version>-x86_64.AppImage` and
+1. Download `OpenCorsair-<version>-x86_64.AppImage` and
    `70-open-corsair.rules` from the
-   [releases page](https://github.com/ManuelSeverin/open-corsair/releases).
+   [releases page](https://github.com/ManuelSeverin/OpenCorsair/releases).
 2. Install the udev rule once. It gives the logged-in user access to Corsair
    HID devices:
 
@@ -43,8 +43,8 @@ Supported right now:
    the tray, and with arguments it works as the CLI (`… status`, `… set anc on`):
 
    ```sh
-   chmod +x open-corsair-*-x86_64.AppImage
-   ./open-corsair-*-x86_64.AppImage
+   chmod +x OpenCorsair-*-x86_64.AppImage
+   ./OpenCorsair-*-x86_64.AppImage
    ```
 
 4. For autostart, add it to your desktop's autostart, e.g. in KDE under

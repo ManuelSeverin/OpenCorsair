@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build a self-contained open-corsair AppImage (Python + PyQt6 bundled).
+# Build a self-contained OpenCorsair AppImage (Python + PyQt6 bundled).
 #
-#   packaging/build-appimage.sh            -> dist/open-corsair-<version>-x86_64.AppImage
+#   packaging/build-appimage.sh            -> dist/OpenCorsair-<version>-x86_64.AppImage
 #
-# Needs: curl, network access. The host still needs pactl/paplay (PipeWire or
+# Needs: curl, rsvg-convert, FUSE, network access. The host still needs pactl/paplay (PipeWire or
 # PulseAudio) for mic mute, and the udev rule for device access.
 set -euo pipefail
 
@@ -48,28 +48,36 @@ rm -f AppDir/AppRun AppDir/*.desktop AppDir/*.png AppDir/*.svg AppDir/.DirIcon
 rm -rf AppDir/usr/share/applications AppDir/usr/share/metainfo
 cat > AppDir/AppRun <<EOF
 #!/bin/sh
-# open-corsair launcher: no arguments starts the tray, otherwise CLI.
+# OpenCorsair launcher: no arguments starts the tray, otherwise CLI.
 HERE="\$(dirname "\$(readlink -f "\$0")")"
 export PYTHONNOUSERSITE=1
 [ "\$#" -eq 0 ] && set -- tray
 exec "\$HERE/$PY" -I -m open_corsair.cli "\$@"
 EOF
 chmod +x AppDir/AppRun
-cp "$ROOT/assets/icon.svg" AppDir/open-corsair.svg
-cp "$ROOT/assets/icon.svg" AppDir/.DirIcon
-cat > AppDir/open-corsair.desktop <<'EOF'
+cp "$ROOT/assets/icons/opencorsair.svg" AppDir/opencorsair.svg
+cp "$ROOT/assets/icons/opencorsair.svg" AppDir/.DirIcon
+ICONS=AppDir/usr/share/icons/hicolor
+mkdir -p "$ICONS/scalable/apps"
+cp "$ROOT/assets/icons/opencorsair.svg" "$ICONS/scalable/apps/"
+for s in 16 22 24 32; do
+    v=small; [ "$s" -ge 32 ] && v=medium
+    mkdir -p "$ICONS/${s}x${s}/apps"
+    rsvg-convert -w "$s" -h "$s" "$ROOT/assets/icons/opencorsair-$v.svg" -o "$ICONS/${s}x${s}/apps/opencorsair.png"
+done
+cat > AppDir/opencorsair.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=open-corsair
+Name=OpenCorsair
 Comment=Battery indicator and settings for Corsair wireless headsets
-Exec=open-corsair
-Icon=open-corsair
+Exec=opencorsair
+Icon=opencorsair
 Terminal=false
 Categories=Utility;
 EOF
 
 # 4. Pack
-OUT="$DIST/open-corsair-$VERSION-x86_64.AppImage"
+OUT="$DIST/OpenCorsair-$VERSION-x86_64.AppImage"
 chmod -R a+rX AppDir
 rm -f "$OUT"
 # (appimagetool's extract-and-run mode is broken in current builds; needs FUSE)

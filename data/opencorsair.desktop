@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=open-corsair
+Name=OpenCorsair
 Comment=Battery indicator and settings for Corsair wireless headsets
 Exec=open-corsair tray
-Icon=audio-headset
+Icon=opencorsair
 Terminal=false
 Categories=Utility;
 X-GNOME-Autostart-enabled=true

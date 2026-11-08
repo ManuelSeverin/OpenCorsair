@@ -387,7 +387,7 @@ class Tray:
         self.status_action.setText(text)
         self.detail_action.setVisible(False)
         self.tray.setIcon(render_icon(None, self.fg()))
-        self.tray.setToolTip(f"open-corsair: {text}")
+        self.tray.setToolTip(f"OpenCorsair: {text}")
 
     def fg(self) -> QColor:
         return self.app.palette().windowText().color()
@@ -397,7 +397,7 @@ class Tray:
         model = self.headset.model if self.headset else "Corsair headset"
         if st is None:
             self.tray.setIcon(render_icon(None, self.fg()))
-            self.tray.setToolTip("open-corsair")
+            self.tray.setToolTip("OpenCorsair")
             return
         if not st.connected:
             text = f"{model}: not connected"
@@ -437,8 +437,8 @@ class Tray:
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("open-corsair")
-    app.setDesktopFileName("open-corsair")
+    app.setApplicationName("OpenCorsair")
+    app.setDesktopFileName("opencorsair")
     app.setQuitOnLastWindowClosed(False)
     # quit cleanly on Ctrl+C / systemctl stop, so the headset gets handed back
     for sig in (signal.SIGINT, signal.SIGTERM):
