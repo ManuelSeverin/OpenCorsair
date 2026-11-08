@@ -82,7 +82,7 @@ def cmd_status(args) -> int:
     elif not st.connected:
         print(f"{model}: headset not connected")
     else:
-        print(f"{model}: {st.battery:.0f}% ({st.status.name.lower()}, {st.voltage_mv} mV, fw {fw})")
+        print(f"{model}: {int(st.battery)}% ({st.status.name.lower()}, {st.voltage_mv} mV, fw {fw})")
     return 0
 
 

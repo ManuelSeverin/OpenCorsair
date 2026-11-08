@@ -47,8 +47,13 @@ Property `0x03`: `1` hardware, `2` software, `4` sleep.
   `03 01 02 00` (release). The host must mute the audio source, as iCUE and
   OpenLinkHub do. Property-change notifications (`03 01 01 <prop> 00
   <value>`, e.g. battery `0f`) also arrive in this mode.
-- **Keep-alive:** send cmd `12` (`02 09 12`) every few seconds. It answers
-  with status 0. The headset comes back in hardware mode after a power cycle.
+- **Keep-alive:** cmd `12` (`02 09 12`) answers with status 0, but iCUE only
+  pings devices whose manifest has a `RequiredPingInterval`, which the
+  Virtuoso MAX does not have. open-corsair does not ping either. It re-checks
+  the mode once a minute, because the headset comes back in hardware mode
+  after a power cycle.
+- iCUE does the same: it enters software mode once, mutes the OS capture
+  endpoint on the mic key, and restores hardware mode on exit.
 
 ## Properties
 
@@ -69,7 +74,7 @@ Headset (`09`):
 | `53` | battery voltage | u16 mV |
 | `d1` | ANC | 0 off, 1 on, 2 transparency |
 | `d2` / `d3` | left / right wheel function | 1 system volume, 2 Bluetooth volume |
-| `d4` | mic mute LED | 0 off, 2 on |
+| `d4` | mic LED while unmuted (`MicrophoneUnmutedIndicationBehavior`) | 0 off, 2 on |
 | `35` | wireless mode switch position | |
 | `3e` | free onboard storage | |
 | `40` | idle time | |

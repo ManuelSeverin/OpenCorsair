@@ -24,7 +24,6 @@ from .headset import Headset, HeadsetSettings, HeadsetState
 from . import config
 from .mic import MicControl
 
-HEARTBEAT_MS = 10_000
 # In software mode the headset pushes battery changes itself, so polling is
 # only a fallback. Keep radio traffic low: it costs headset battery.
 POLL_CONNECTED_MS = 60_000
@@ -110,7 +109,7 @@ def render_icon(state: HeadsetState | None, fg: QColor, muted: bool = False) -> 
             p.end()
             return QIcon(pm)
 
-        text = f"{pct:.0f}"
+        text = f"{int(pct)}"  # truncate like iCUE
         font = QFont()
         font.setBold(True)
         font.setPixelSize(36 if len(text) < 3 else 27)
@@ -182,7 +181,6 @@ class Tray:
         self.menu.aboutToShow.connect(lambda: self.refresh(with_settings=True))
         self.reconnect_timer = QTimer(interval=RECONNECT_MS, timeout=self.try_open)
         self.debounce = QTimer(singleShot=True, interval=300, timeout=self.refresh)
-        self.heartbeat_timer = QTimer(interval=HEARTBEAT_MS, timeout=self.heartbeat)
         app.aboutToQuit.connect(self.shutdown)
 
         self.update_ui()
@@ -221,7 +219,7 @@ class Tray:
             [(0, "Never")] + [(m, f"After {m} min") for m in AUTO_OFF_MINUTES],
             lambda hs, v: hs.set_sleep(v or None),
         )
-        self.mic_led_action = QAction("Mic mute LED", self.menu, checkable=True)
+        self.mic_led_action = QAction("Mic LED while unmuted", self.menu, checkable=True)
         self.mic_led_action.triggered.connect(lambda c: self.apply(lambda hs, v: hs.set_mic_led(v), c))
         self.menu.addAction(self.mic_led_action)
         return [self.anc_menu, self.sidetone_menu, self.sleep_menu]
@@ -275,7 +273,6 @@ class Tray:
         self.notifier = QSocketNotifier(self.headset.bragi.fileno(), QSocketNotifier.Type.Read)
         self.notifier.activated.connect(self.on_readable)
         self.poll.start()
-        self.heartbeat_timer.start()
         self.refresh()
 
     def drop_device(self, reason: str) -> None:
@@ -287,7 +284,6 @@ class Tray:
             self.headset.close()
             self.headset = None
         self.poll.stop()
-        self.heartbeat_timer.stop()
         self.set_error(reason)
         self.reconnect_timer.start()
 
@@ -318,16 +314,6 @@ class Tray:
             self.headset.enter_software_mode()
             self.key_bits = 0
 
-    def heartbeat(self) -> None:
-        if not self.headset or not (self.state and self.state.connected):
-            return
-        try:
-            self.headset.heartbeat()
-        except OSError:
-            self.drop_device("Receiver disconnected")
-        except BragiError:
-            pass
-
     def set_sound(self, style: str) -> None:
         self.cfg["mute_sound"] = style
         config.save(self.cfg)
@@ -356,7 +342,6 @@ class Tray:
 
         The PipeWire mute is left as it is, so a muted mic stays muted.
         """
-        self.heartbeat_timer.stop()
         if self.headset:
             try:
                 if self.headset.is_connected():
@@ -424,7 +409,7 @@ class Tray:
                 BatteryStatus.DISCHARGING: "on battery",
                 BatteryStatus.FULL: "fully charged",
             }.get(st.status, "unknown")
-            text = f"{model}: {st.battery:.0f}% ({status})"
+            text = f"{model}: {int(st.battery)}% ({status})"
             if st.voltage_mv:
                 self.detail_action.setText(
                     f"{st.battery:.1f}% · {st.voltage_mv / 1000:.2f} V · updated {time.strftime('%H:%M')}"
@@ -444,7 +429,7 @@ class Tray:
         if low and not self.warned_low:
             self.tray.showMessage(
                 "Headset battery low",
-                f"{model}: {st.battery:.0f}% remaining",
+                f"{model}: {int(st.battery)}% remaining",
                 QSystemTrayIcon.MessageIcon.Warning,
             )
         self.warned_low = low

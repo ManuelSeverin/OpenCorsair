@@ -74,7 +74,7 @@ class Prop(enum.IntEnum):
     ANC = 0xD1               # see AncMode
     WHEEL_LEFT = 0xD2
     WHEEL_RIGHT = 0xD3
-    MIC_LED = 0xD4           # 0 = disabled, 2 = enabled
+    MIC_LED = 0xD4           # LED lit while mic is unmuted: 0 = off, 2 = on
 
 
 class AncMode(enum.IntEnum):
