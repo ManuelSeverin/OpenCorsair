@@ -62,8 +62,10 @@ $ open-corsair set mic-led on
 
 While the tray runs it keeps the headset in *software mode*, just like iCUE.
 In this mode the headset reports its mute button instead of muting by itself.
-The tray then mutes the headset's microphone in PipeWire, plays two short
-beeps (falling = muted, rising = unmuted) and shows a red badge on the icon.
+The tray then mutes the headset's microphone in PipeWire, plays a short sound
+(falling = muted, rising = unmuted) and shows a red badge on the icon. The
+sound can be switched between Soft, Beeps and Off in the tray menu ("Mute
+sound"); the choice is stored in `~/.config/open-corsair/config.json`.
 Settings can be written in this mode without any mode switch, so changing a
 setting never unmutes the mic.
 

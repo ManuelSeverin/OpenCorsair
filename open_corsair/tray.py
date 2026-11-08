@@ -21,10 +21,14 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from .bragi import KEY_MIC, REPORT_EVENT, AncMode, BatteryStatus, BragiError, Event, Mode
 from .headset import Headset, HeadsetSettings, HeadsetState
+from . import config
 from .mic import MicControl
 
-HEARTBEAT_MS = 5_000
-POLL_MS = 20_000  # the headset sends no events in hardware mode, so poll
+HEARTBEAT_MS = 10_000
+# In software mode the headset pushes battery changes itself, so polling is
+# only a fallback. Keep radio traffic low: it costs headset battery.
+POLL_CONNECTED_MS = 60_000
+POLL_DISCONNECTED_MS = 20_000
 RECONNECT_MS = 5_000
 LOW_BATTERY = 15
 SIDETONE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
@@ -137,6 +141,7 @@ class Tray:
         self.headset: Headset | None = None
         self.notifier: QSocketNotifier | None = None
         self.state: HeadsetState | None = None
+        self.cfg = config.load()
         self.mic: MicControl | None = None
         self.muted = False
         self.warned_low = False
@@ -149,7 +154,7 @@ class Tray:
         self.detail_action = QAction("")
         self.detail_action.setEnabled(False)
         self.detail_action.setVisible(False)
-        refresh = QAction("Refresh", triggered=self.refresh)
+        refresh = QAction("Refresh", triggered=lambda: self.refresh(with_settings=True))
         quit_ = QAction("Quit", triggered=app.quit)
         for a in (self.status_action, self.detail_action):
             self.menu.addAction(a)
@@ -157,6 +162,13 @@ class Tray:
         self.mute_action = QAction("Microphone muted", self.menu, checkable=True)
         self.mute_action.triggered.connect(self.set_muted)
         self.menu.addAction(self.mute_action)
+        self.sound_menu, self.sound_actions = self._radio_menu(
+            "Mute sound",
+            [("soft", "Soft"), ("beeps", "Beeps"), ("off", "Off")],
+            None,
+            handler=self.set_sound,
+        )
+        self.sound_actions.get(self.cfg["mute_sound"], self.sound_actions["soft"]).setChecked(True)
         self.menu.addSeparator()
         self.settings_menus = self.build_settings_menus()
         self.menu.addSeparator()
@@ -164,9 +176,10 @@ class Tray:
         self.menu.addAction(quit_)
         self._actions = (refresh, quit_)
         self.tray.setContextMenu(self.menu)
-        self.tray.activated.connect(lambda _reason: self.refresh())
+        self.tray.activated.connect(lambda _reason: self.refresh(with_settings=True))
 
-        self.poll = QTimer(interval=POLL_MS, timeout=self.refresh)
+        self.poll = QTimer(interval=POLL_DISCONNECTED_MS, timeout=self.refresh)
+        self.menu.aboutToShow.connect(lambda: self.refresh(with_settings=True))
         self.reconnect_timer = QTimer(interval=RECONNECT_MS, timeout=self.try_open)
         self.debounce = QTimer(singleShot=True, interval=300, timeout=self.refresh)
         self.heartbeat_timer = QTimer(interval=HEARTBEAT_MS, timeout=self.heartbeat)
@@ -177,13 +190,16 @@ class Tray:
         self.try_open()
 
     # -- settings menus --------------------------------------------------
-    def _radio_menu(self, title: str, items, setter) -> tuple[QMenu, dict]:
+    def _radio_menu(self, title: str, items, setter, handler=None) -> tuple[QMenu, dict]:
         menu = self.menu.addMenu(title)
         group = QActionGroup(menu)
         actions = {}
         for value, label in items:
             a = QAction(label, menu, checkable=True)
-            a.triggered.connect(lambda _c=False, v=value: self.apply(setter, v))
+            if handler:
+                a.triggered.connect(lambda _c=False, v=value: handler(v))
+            else:
+                a.triggered.connect(lambda _c=False, v=value: self.apply(setter, v))
             group.addAction(a)
             menu.addAction(a)
             actions[value] = a
@@ -221,7 +237,7 @@ class Tray:
         except BragiError as e:
             self.tray.showMessage("Could not change setting", str(e),
                                   QSystemTrayIcon.MessageIcon.Warning)
-        self.refresh()
+        self.refresh(with_settings=True)
 
     def update_settings_ui(self, st: HeadsetSettings | None) -> None:
         enabled = st is not None
@@ -254,7 +270,7 @@ class Tray:
             self.reconnect_timer.start()
             return
         self.reconnect_timer.stop()
-        self.mic = MicControl(self.headset.usb_name)
+        self.mic = MicControl(self.headset.usb_name, self.cfg["mute_sound"])
         self.headset.bragi.on_event = self.on_event
         self.notifier = QSocketNotifier(self.headset.bragi.fileno(), QSocketNotifier.Type.Read)
         self.notifier.activated.connect(self.on_readable)
@@ -306,13 +322,18 @@ class Tray:
         if not self.headset or not (self.state and self.state.connected):
             return
         try:
-            # also re-takes control quickly after the headset was power-cycled
-            self.ensure_software_mode()
             self.headset.heartbeat()
         except OSError:
             self.drop_device("Receiver disconnected")
         except BragiError:
             pass
+
+    def set_sound(self, style: str) -> None:
+        self.cfg["mute_sound"] = style
+        config.save(self.cfg)
+        if self.mic:
+            self.mic.sound = style
+            self.mic.play_feedback(self.muted)  # preview
 
     def toggle_mute(self) -> None:
         if self.mic:
@@ -343,23 +364,36 @@ class Tray:
             except (OSError, BragiError):
                 pass
 
-    def refresh(self) -> None:
+    def refresh(self, with_settings: bool = False) -> None:
         if not self.headset:
             return
         settings = None
+        was_connected = bool(self.state and self.state.connected)
         try:
             self.state = self.headset.read_state()
             if self.state.connected:
+                # (re-)take control, e.g. after the headset was power-cycled
                 self.ensure_software_mode()
-                settings = self.headset.read_settings()
+                if with_settings or not was_connected:
+                    settings = self.headset.read_settings()
         except OSError:
             self.drop_device("Receiver disconnected")
             return
         except BragiError:
             self.state = HeadsetState(connected=False)
+        self.poll.setInterval(POLL_CONNECTED_MS if self.state.connected else POLL_DISCONNECTED_MS)
+        self.log_state_change()
         self.sync_mute()
-        self.update_settings_ui(settings)
+        if settings is not None or not self.state.connected:
+            self.update_settings_ui(settings)
         self.update_ui()
+
+    def log_state_change(self) -> None:
+        st = self.state
+        key = None if st is None else (st.connected, st.battery, st.status, st.external_power)
+        if key != getattr(self, "_last_logged", object()):
+            self._last_logged = key
+            print(f"state: {st}", flush=True)
 
     # -- UI --------------------------------------------------------------
     def set_error(self, text: str) -> None:

@@ -34,33 +34,54 @@ def _find(kind: str, usb_name: str) -> str | None:
     return None
 
 
-def _tone_file(name: str, freqs: tuple[float, ...]) -> Path:
-    """Write (once) a short beep sequence as a WAV file."""
+SOUND_STYLES = ("off", "soft", "beeps")
+RATE = 48000
+
+
+def _soft(rising: bool) -> list[float]:
+    """One short, quiet gliding blip with a soft decay."""
+    n = int(RATE * 0.12)
+    f0, f1 = (392.0, 587.0) if rising else (587.0, 392.0)
+    out, phase = [], 0.0
+    for i in range(n):
+        t = i / n
+        phase += 2 * math.pi * (f0 + (f1 - f0) * t) / RATE
+        env = min(1.0, i / 480) * math.exp(-4.0 * t)  # 10 ms attack, smooth decay
+        out.append(0.12 * env * math.sin(phase))
+    return out
+
+
+def _beeps(rising: bool) -> list[float]:
+    out = []
+    for f in ((587, 880) if rising else (880, 587)):
+        n = int(RATE * 0.09)
+        out += [0.27 * min(1.0, i / 240, (n - i) / 240) * math.sin(2 * math.pi * f * i / RATE)
+                for i in range(n)]
+        out += [0.0] * int(RATE * 0.04)
+    return out
+
+
+def _tone_file(style: str, muted: bool) -> Path:
+    """Write (once) the feedback sound as a WAV file in the cache."""
     cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "open-corsair"
-    path = cache / f"{name}.wav"
+    path = cache / f"{style}-{'muted' if muted else 'unmuted'}-v2.wav"
     if path.exists():
         return path
     cache.mkdir(parents=True, exist_ok=True)
-    rate, beep, gap = 48000, 0.09, 0.04
-    frames = bytearray()
-    for f in freqs:
-        n = int(rate * beep)
-        for i in range(n):
-            env = min(1.0, i / 240, (n - i) / 240)  # short fade in/out
-            frames += struct.pack("<h", int(9000 * env * math.sin(2 * math.pi * f * i / rate)))
-        frames += bytes(2 * int(rate * gap))
+    samples = (_soft if style == "soft" else _beeps)(rising=not muted)
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes(bytes(frames))
+        w.setframerate(RATE)
+        w.writeframes(b"".join(struct.pack("<h", int(32767 * x)) for x in samples))
     return path
 
 
 class MicControl:
-    def __init__(self, usb_name: str):
+    def __init__(self, usb_name: str, sound: str = "soft"):
         # e.g. "Corsair_CORSAIR_VIRTUOSO_MAX_WIRELESS_Gaming_Receiver"
         self.usb_name = usb_name
+        self.sound = sound
         self.available = shutil.which("pactl") is not None
 
     def source(self) -> str | None:
@@ -96,11 +117,10 @@ class MicControl:
         return not cur if self.set_muted(not cur) else cur
 
     def play_feedback(self, muted: bool) -> None:
-        """Short beeps in the headset: falling = muted, rising = unmuted."""
-        if not shutil.which("paplay"):
+        """Short sound in the headset: falling = muted, rising = unmuted."""
+        if self.sound not in SOUND_STYLES or self.sound == "off" or not shutil.which("paplay"):
             return
-        tone = _tone_file("muted", (880, 587)) if muted else _tone_file("unmuted", (587, 880))
-        cmd = ["paplay", str(tone)]
+        cmd = ["paplay", str(_tone_file(self.sound, muted))]
         if sink := self.sink():
             cmd[1:1] = ["-d", sink]
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
