@@ -26,6 +26,36 @@ Supported right now:
 
 ## Install
 
+### AppImage (recommended)
+
+1. Download `open-corsair-<version>-x86_64.AppImage` and
+   `70-open-corsair.rules` from the
+   [releases page](https://github.com/ManuelSeverin/open-corsair/releases).
+2. Install the udev rule once. It gives the logged-in user access to Corsair
+   HID devices:
+
+   ```sh
+   sudo install -m 644 70-open-corsair.rules /etc/udev/rules.d/
+   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+   ```
+
+3. Make the AppImage executable and start it. Without arguments it starts
+   the tray, and with arguments it works as the CLI (`… status`, `… set anc on`):
+
+   ```sh
+   chmod +x open-corsair-*-x86_64.AppImage
+   ./open-corsair-*-x86_64.AppImage
+   ```
+
+4. For autostart, add it to your desktop's autostart, e.g. in KDE under
+   System Settings → Autostart.
+
+Build it yourself with `packaging/build-appimage.sh`. The AppImage bundles
+Python and Qt. The host needs FUSE plus `pactl`/`paplay` (PipeWire or
+PulseAudio) for mic mute.
+
+### From source
+
 ```sh
 ./install.sh
 ```
