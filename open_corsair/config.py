@@ -1,4 +1,5 @@
-"""Small persistent user settings (~/.config/open-corsair/config.json)."""
+"""Small persistent user settings (~/.config/open-corsair/config.json,
+%APPDATA%\\open-corsair\\config.json on Windows)."""
 from __future__ import annotations
 
 import json
@@ -16,7 +17,10 @@ DEFAULTS = {
 
 
 def _path() -> Path:
-    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "open-corsair" / "config.json"
 
 

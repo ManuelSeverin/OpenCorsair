@@ -123,7 +123,35 @@ stay in the tray, since the tray draws them.
 The mute key mutes the headset microphone in PipeWire, the same way the tray
 does, and plays the sound chosen under "Mute sound" in the tray. It can
 toggle, mute, unmute or work as push to talk. The key and the tray icon follow
-each other and the headset button right away.
+each other and the headset button right away. Each mute key can also pick its
+own sound.
+
+### Elgato Stream Deck on Windows
+
+The same plugin also runs in the Elgato Stream Deck app on Windows 10/11:
+
+```sh
+packaging/build-opendeck-plugin.sh --windows
+```
+
+This builds `dist/OpenCorsair-<version>-windows.streamDeckPlugin` (needs
+`curl`, `unzip` and `rsvg-convert`). Copy it to the Windows PC and
+double-click it to install. Nothing else has to be installed: the package
+brings the official embeddable Python from python.org, and the Stream Deck
+app starts it through its built-in Node.js (`launcher.js`). Stream Deck 6.4
+or newer is needed.
+
+On Windows the plugin talks to the receiver through `hid.dll` and mutes the
+headset microphone through the Windows audio mixer, the same switch as
+"Mute" in the Windows sound settings. The mute sound plays on the default
+playback device. The mute key checks the mixer once a second, so it follows
+mutes made elsewhere. There is no tray on Windows, so each settings change
+switches the headset to software mode only for the write.
+
+Quit iCUE while using the plugin. iCUE talks to the same receiver and holds
+the headset in its own software mode, so the two get in each other's way.
+The plugin writes its log to `logs\opencorsair.log` in its plugin folder
+(`%APPDATA%\Elgato\StreamDeck\Plugins\io.github.manuelseverin.opencorsair.sdPlugin`).
 
 ### How mute works
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import sys
 from dataclasses import dataclass
 
 from .bragi import (
@@ -17,7 +18,10 @@ from .bragi import (
     Prop,
     WheelFunction,
 )
-from .hidraw import enumerate_hidraw
+if sys.platform == "win32":
+    from .winhid import enumerate_hidraw
+else:
+    from .hidraw import enumerate_hidraw
 
 # receiver PID -> model name
 SUPPORTED = {

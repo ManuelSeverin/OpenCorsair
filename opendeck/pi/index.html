@@ -53,7 +53,13 @@ const ACTIONS = {
 			["mute", "Mute"],
 			["unmute", "Unmute"],
 			["ptt", "Push to talk (hold to unmute)"],
-		], hint: "Uses the same mute and sound as the tray (Mute sound menu)." },
+		] },
+		{ key: "sound", label: "Sound", type: "select", default: "", options: [
+			["", "Same as the tray"],
+			["soft", "Soft"],
+			["beeps", "Beeps"],
+			["off", "Off"],
+		], hint: "Plays when the mic is muted or unmuted. Without the tray (e.g. on Windows) \u201cSame as the tray\u201d means Soft." },
 	],
 	anc: [
 		{ key: "press", label: "On press", type: "select", default: "cycle", options: [
@@ -133,7 +139,7 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionIn
 	const settings = Object.assign({}, actionInfo.payload.settings || {});
 	for (const f of fields) if (settings[f.key] === undefined) settings[f.key] = f.default;
 
-	const ws = new WebSocket("ws://localhost:" + port);
+	const ws = new WebSocket("ws://127.0.0.1:" + port);
 	const send = msg => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
 	const save = () => send({ event: "setSettings", context, payload: settings });
 	const toPlugin = payload => send({ event: "sendToPlugin", context, action: actionInfo.action, payload });

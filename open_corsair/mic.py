@@ -63,7 +63,8 @@ def _beeps(rising: bool) -> list[float]:
 
 def _tone_file(style: str, muted: bool) -> Path:
     """Write (once) the feedback sound as a WAV file in the cache."""
-    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "open-corsair"
+    base = os.environ.get("LOCALAPPDATA") if os.name == "nt" else os.environ.get("XDG_CACHE_HOME")
+    cache = Path(base or Path.home() / ".cache") / "open-corsair"
     path = cache / f"{style}-{'muted' if muted else 'unmuted'}-v2.wav"
     if path.exists():
         return path

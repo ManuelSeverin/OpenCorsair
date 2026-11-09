@@ -18,12 +18,17 @@ from __future__ import annotations
 
 import contextlib
 import enum
-import fcntl
 import os
+import sys
 import time
 from typing import Callable
 
-from .hidraw import Hidraw
+if sys.platform == "win32":
+    from .winhid import Hidraw
+else:
+    import fcntl
+
+    from .hidraw import Hidraw
 
 REPORT_OUT = 0x02
 REPORT_RESPONSE = 0x01
@@ -120,39 +125,89 @@ def _lock_path(path: str) -> str:
     return os.path.join(run, f"open-corsair-{os.path.basename(path)}.lock")
 
 
+class _FileLock:
+    """flock on a file in the runtime dir (Linux)."""
+
+    def __init__(self, path: str):
+        self.fd = os.open(_lock_path(path), os.O_RDWR | os.O_CREAT, 0o600)
+
+    def acquire(self) -> None:
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+
+    def release(self) -> None:
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+
+    def close(self) -> None:
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
+class _MutexLock:
+    """Named mutex (Windows). Acquire and release must happen on the same thread."""
+
+    def __init__(self, path: str):
+        import ctypes
+        import hashlib
+        from ctypes import wintypes
+        self.k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.k32.CreateMutexW.restype = wintypes.HANDLE
+        self.k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        self.k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self.k32.WaitForSingleObject.restype = wintypes.DWORD
+        self.k32.ReleaseMutex.argtypes = [wintypes.HANDLE]
+        self.k32.CloseHandle.argtypes = [wintypes.HANDLE]
+        # device paths contain backslashes, which mutex names must not
+        tag = hashlib.sha1(path.lower().encode()).hexdigest()[:16]
+        self.handle = self.k32.CreateMutexW(None, False, f"Local\\open-corsair-{tag}")
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def acquire(self) -> None:
+        # WAIT_OBJECT_0 or WAIT_ABANDONED (owner died): both mean we own it
+        if self.k32.WaitForSingleObject(self.handle, 0xFFFFFFFF) not in (0, 0x80):
+            raise OSError("could not take the device lock")
+
+    def release(self) -> None:
+        self.k32.ReleaseMutex(self.handle)
+
+    def close(self) -> None:
+        if self.handle:
+            self.k32.CloseHandle(self.handle)
+            self.handle = None
+
+
 class Bragi:
     """Request/response access to one Bragi hidraw node.
 
     Replies are delivered to every process that has the hidraw node open and
     carry no request id, so requests from different processes are serialised
-    with an flock.
+    with an flock (a named mutex on Windows).
     """
 
     def __init__(self, path: str, timeout: float = 1.0):
         self.dev = Hidraw(path)
         self.timeout = timeout
         self.on_event: Callable[[bytes], None] | None = None
-        self._lock_fd = os.open(_lock_path(path), os.O_RDWR | os.O_CREAT, 0o600)
+        self._lock = (_MutexLock if sys.platform == "win32" else _FileLock)(path)
         self._lock_depth = 0
 
     def close(self) -> None:
         self.dev.close()
-        if self._lock_fd >= 0:
-            os.close(self._lock_fd)
-            self._lock_fd = -1
+        self._lock.close()
 
     @contextlib.contextmanager
     def locked(self):
         """Hold the cross-process lock (re-entrant within this object)."""
         if self._lock_depth == 0:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_EX)
+            self._lock.acquire()
         self._lock_depth += 1
         try:
             yield
         finally:
             self._lock_depth -= 1
             if self._lock_depth == 0:
-                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+                self._lock.release()
 
     def fileno(self) -> int:
         return self.dev.fileno()

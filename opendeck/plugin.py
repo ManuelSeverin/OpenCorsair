@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """OpenDeck / Stream Deck plugin for OpenCorsair headsets.
 
-OpenDeck starts this file with
+OpenDeck (Linux) and the Elgato Stream Deck app (Windows) start this file with
     -port <n> -pluginUUID <uuid> -registerEvent <event> -info <json>
-and talks to it over a WebSocket on localhost. Only the standard library is
+and talk to it over a WebSocket on localhost. Only the standard library is
 used, so the plugin runs on the system Python without extra packages. The
 open_corsair package is copied next to this file by
 packaging/build-opendeck-plugin.sh; when run from the repo it is found one
-directory up.
+directory up. On Windows, launcher.js starts this file with the Python that
+the Windows build bundles.
 
 Device access goes through open_corsair.headset, which serialises requests
 with a cross-process lock, so the plugin works next to a running tray.
@@ -35,10 +36,15 @@ except ImportError:
 from open_corsair.bragi import AncMode, BragiError, WheelFunction  # noqa: E402
 from open_corsair import config  # noqa: E402
 from open_corsair.headset import Headset, HeadsetSettings, HeadsetState, find_receiver  # noqa: E402
-from open_corsair.mic import MicControl  # noqa: E402
+if sys.platform == "win32":
+    from open_corsair.winmic import MicControl  # noqa: E402
+else:
+    from open_corsair.mic import MicControl  # noqa: E402
 
 PREFIX = "io.github.manuelseverin.opencorsair."
 POLL_S = 60          # battery and settings refresh while keys are visible
+MUTE_POLL_S = 1.0    # Windows: how often the mute key checks the mic mute
+WINDOWS = sys.platform == "win32"
 AUTO_OFF_STEPS = (0, 5, 10, 15, 30, 60, 90)
 ANC_CYCLES = {
     "cycle": (AncMode.OFF, AncMode.ON, AncMode.TRANSPARENCY),
@@ -86,16 +92,31 @@ def battery_image(st: HeadsetState | None) -> str:
         else:
             text = str(int(pct))  # truncated, like the tray and iCUE
             size = 50 if len(text) < 3 else 40
-            inner += (f'<text x="66" y="72" font-family="Liberation Sans, DejaVu Sans, sans-serif" '
+            inner += (f'<text x="66" y="72" font-family="Liberation Sans, DejaVu Sans, Segoe UI, Arial, sans-serif" '
                       f'font-weight="bold" font-size="{size}" text-anchor="middle" '
                       f'dominant-baseline="central" fill="#f2f3f7" {halo}>{text}</text>')
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">{body}{inner}</svg>'
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 
+LOG_FILE = HERE / "logs" / "opencorsair.log"
+
+
 def log(*args) -> None:
-    # OpenDeck writes plugin stdout/stderr to ~/.local/share/opendeck/logs/plugins/
-    print(time.strftime("%H:%M:%S"), *args, file=sys.stderr, flush=True)
+    # OpenDeck writes plugin stdout/stderr to ~/.local/share/opendeck/logs/plugins/.
+    # On Windows the plugin runs without a console, so it logs next to itself.
+    line = " ".join([time.strftime("%Y-%m-%d %H:%M:%S"), *map(str, args)])
+    if not WINDOWS:
+        print(line, file=sys.stderr, flush=True)
+        return
+    try:
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > 1_000_000:
+            LOG_FILE.replace(LOG_FILE.with_suffix(".old.log"))
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 def clamp(v: int, lo: int = 0, hi: int = 100) -> int:
@@ -125,10 +146,12 @@ class WebSocket:
 
     @classmethod
     async def connect(cls, port: int) -> "WebSocket":
-        reader, writer = await asyncio.open_connection("localhost", port)
+        # 127.0.0.1, not localhost: on Windows localhost may resolve to ::1
+        # first, and the Stream Deck app listens on IPv4 only
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
         key = base64.b64encode(os.urandom(16)).decode()
         writer.write((
-            f"GET / HTTP/1.1\r\nHost: localhost:{port}\r\nUpgrade: websocket\r\n"
+            f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n"
             f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
             "Sec-WebSocket-Version: 13\r\n\r\n").encode())
         await writer.drain()
@@ -224,7 +247,9 @@ class Plugin:
             self.state, self.settings = await self.device(self._read)
             self.error = None
         except PermissionError:
-            self.state, self.settings, self.error = None, None, "No permission for the receiver (udev rule missing?)"
+            self.state, self.settings, self.error = None, None, (
+                "No access to the receiver (is another app holding it?)" if WINDOWS
+                else "No permission for the receiver (udev rule missing?)")
         except (OSError, BragiError) as e:
             self.state, self.settings, self.error = None, None, str(e) or type(e).__name__
         if self.error:
@@ -275,11 +300,12 @@ class Plugin:
         mic = self._mic()
         return mic.is_muted() if mic else None
 
-    def _write_mute(self, muted: bool) -> bool:
+    def _write_mute(self, muted: bool, sound: str) -> bool:
         mic = self._mic()
         if not mic:
             return False
-        mic.sound = config.load()["mute_sound"]  # the tray's "Mute sound" choice
+        # the key's own choice, else the tray's "Mute sound" setting
+        mic.sound = sound if sound in ("off", "soft", "beeps") else config.load()["mute_sound"]
         return mic.set_muted(muted)
 
     async def mic_call(self, fn, *args):
@@ -300,7 +326,8 @@ class Plugin:
     async def set_mute(self, ctx: str, muted: bool) -> None:
         if muted == self.muted:
             return
-        if await self.mic_call(self._write_mute, muted):
+        sound = self.contexts.get(ctx, {}).get("settings", {}).get("sound", "")
+        if await self.mic_call(self._write_mute, muted, sound):
             self.muted = muted
             await self.render_all()
         else:
@@ -308,6 +335,12 @@ class Plugin:
 
     async def watch_mute(self) -> None:
         """Follow mute changes made elsewhere (tray, headset button, KDE)."""
+        if WINDOWS:
+            # no change events without a COM callback: ask the mixer instead
+            while True:
+                await asyncio.sleep(MUTE_POLL_S)
+                if any(i["action"] == "mute" for i in self.contexts.values()):
+                    self.schedule_mute_refresh()
         while True:
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -610,7 +643,7 @@ async def main() -> None:
     args = parse_args(sys.argv[1:])
     ws = await WebSocket.connect(int(args["port"]))
     await ws.send({"event": args["registerEvent"], "uuid": args["pluginUUID"]})
-    log("registered with OpenDeck")
+    log("registered with", "Stream Deck" if WINDOWS else "OpenDeck")
     await Plugin(ws).run()
     log("connection closed")
 
