@@ -2,7 +2,7 @@
 //
 // The Stream Deck app runs plugins either as .exe or with its own Node.js.
 // This file only starts plugin.py with the Python bundled in python\ (put
-// there by packaging/build-opendeck-plugin.sh --windows) and passes the
+// there by packaging/build-streamdeck-plugin.sh --windows) and passes the
 // connection arguments through. plugin.py talks to the Stream Deck app itself.
 "use strict";
 const { spawn } = require("child_process");

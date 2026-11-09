@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build the OpenDeck / Stream Deck plugin.
+# Build the Stream Deck plugin (OpenDeck on Linux, Elgato app on Windows).
 #
-#   packaging/build-opendeck-plugin.sh            -> dist/io.github.manuelseverin.opencorsair.sdPlugin
+#   packaging/build-streamdeck-plugin.sh            -> dist/io.github.manuelseverin.opencorsair.sdPlugin
 #                                                    dist/OpenCorsair-<version>.streamDeckPlugin
-#   packaging/build-opendeck-plugin.sh --install  also copies it to ~/.config/opendeck/plugins
-#   packaging/build-opendeck-plugin.sh --windows  -> dist/OpenCorsair-<version>-windows.streamDeckPlugin
+#   packaging/build-streamdeck-plugin.sh --install  also copies it to ~/.config/opendeck/plugins
+#   packaging/build-streamdeck-plugin.sh --windows  -> dist/OpenCorsair-<version>-windows.streamDeckPlugin
 #                                                    for the Elgato Stream Deck app on Windows
 #
 # The Linux plugin needs only python3 (3.10+) on the host. The device code of
@@ -31,8 +31,8 @@ common() {
     local out="$1"; shift
     rm -rf "$out"
     mkdir -p "$out/open_corsair"
-    cp -r "$ROOT/opendeck/pi" "$out/"
-    install -m 755 "$ROOT/opendeck/plugin.py" "$out/plugin.py"
+    cp -r "$ROOT/streamdeck/pi" "$out/"
+    install -m 755 "$ROOT/streamdeck/plugin.py" "$out/plugin.py"
     # only the modules without Qt dependencies
     for m in __init__ bragi hidraw headset mic config "$@"; do
         cp "$ROOT/open_corsair/$m.py" "$out/open_corsair/"
@@ -50,20 +50,20 @@ package() {
 build_linux() {
     local out="$DIST/$ID.sdPlugin"
     common "$out"
-    cp -r "$ROOT/opendeck/icons" "$out/"
-    sed "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" "$ROOT/opendeck/manifest.json" > "$out/manifest.json"
+    cp -r "$ROOT/streamdeck/icons" "$out/"
+    sed "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" "$ROOT/streamdeck/manifest.json" > "$out/manifest.json"
     package "$DIST" "$DIST/OpenCorsair-$VERSION.streamDeckPlugin"
 }
 
 build_windows() {
     local stage="$DIST/windows" out="$DIST/windows/$ID.sdPlugin" cache="$DIST/cache"
     common "$out" winhid winmic
-    install -m 644 "$ROOT/opendeck/launcher.js" "$out/launcher.js"
+    install -m 644 "$ROOT/streamdeck/launcher.js" "$out/launcher.js"
 
     # key images as PNG (1x and @2x); the Stream Deck app is pickier about SVG
     command -v rsvg-convert >/dev/null || { echo "rsvg-convert is needed (librsvg)" >&2; exit 1; }
     mkdir -p "$out/icons"
-    for svg in "$ROOT"/opendeck/icons/*.svg; do
+    for svg in "$ROOT"/streamdeck/icons/*.svg; do
         local name size
         name="$(basename "$svg" .svg)"
         case "$name" in
@@ -87,7 +87,7 @@ build_windows() {
     fi
     unzip -q "$cache/$PY_ZIP" -d "$out/python"
 
-    python3 - "$ROOT/opendeck/manifest.json" "$out/manifest.json" "$VERSION" <<'EOF'
+    python3 - "$ROOT/streamdeck/manifest.json" "$out/manifest.json" "$VERSION" <<'EOF'
 import json, sys
 src, dst, version = sys.argv[1:]
 m = json.load(open(src))

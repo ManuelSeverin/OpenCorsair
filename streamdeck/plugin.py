@@ -6,7 +6,7 @@ OpenDeck (Linux) and the Elgato Stream Deck app (Windows) start this file with
 and talk to it over a WebSocket on localhost. Only the standard library is
 used, so the plugin runs on the system Python without extra packages. The
 open_corsair package is copied next to this file by
-packaging/build-opendeck-plugin.sh; when run from the repo it is found one
+packaging/build-streamdeck-plugin.sh; when run from the repo it is found one
 directory up. On Windows, launcher.js starts this file with the Python that
 the Windows build bundles.
 

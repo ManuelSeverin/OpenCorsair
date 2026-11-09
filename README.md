@@ -107,16 +107,17 @@ $ open-corsair set mic-led on
 $ open-corsair set wheel-right system      # system | bluetooth | off
 ```
 
-## OpenDeck / Stream Deck plugin
+## Stream Deck plugin (OpenDeck and Elgato)
 
-The `opendeck/` folder holds a plugin for [OpenDeck](https://github.com/nekename/OpenDeck)
+The `streamdeck/` folder holds a plugin for [OpenDeck](https://github.com/nekename/OpenDeck)
+(Linux) and the Elgato Stream Deck app (Windows, see below)
 with keys for mic mute, noise cancelling, sidetone, LED brightness, auto
 power-off, mic LED, earcup wheels and battery level. Each key shows the current value,
 and its settings choose what a press does (cycle, toggle, set a value, step
 up/down). Sidetone and brightness also work on Stream Deck+ dials.
 
 ```sh
-packaging/build-opendeck-plugin.sh --install   # then restart OpenDeck
+packaging/build-streamdeck-plugin.sh --install   # then restart OpenDeck
 ```
 
 This builds `dist/OpenCorsair-<version>.streamDeckPlugin` and copies the
@@ -139,7 +140,7 @@ own sound.
 The same plugin also runs in the Elgato Stream Deck app on Windows 10/11:
 
 ```sh
-packaging/build-opendeck-plugin.sh --windows
+packaging/build-streamdeck-plugin.sh --windows
 ```
 
 This builds `dist/OpenCorsair-<version>-windows.streamDeckPlugin` (needs
