@@ -6,6 +6,14 @@ Linux userspace driver for Corsair wireless headsets that use Corsair's
 "Bragi" HID protocol. It talks to the USB receiver directly through
 `/dev/hidraw`, so no kernel module and no iCUE are needed.
 
+> [!NOTE]
+> **Made with AI.** The program, the Stream Deck plugin and this README were
+> written by an AI (Claude, by Anthropic) under the direction of the
+> maintainer and tested on a real Virtuoso MAX Wireless. The protocol
+> knowledge comes from observing the receiver and from iCUE. Use it at your
+> own risk. This project is not affiliated with or endorsed by Corsair or
+> Elgato.
+
 Supported right now:
 
 | Device | Receiver USB ID | Status |
