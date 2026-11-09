@@ -1,0 +1,241 @@
+{
+	"Name": "OpenCorsair",
+	"Description": "Change the settings of Corsair wireless headsets (Virtuoso MAX Wireless): noise cancelling, sidetone, LED brightness, auto power-off, mic LED, earcup wheels, battery, mic mute.",
+	"Author": "ManuelSeverin",
+	"Version": "0.3.0",
+	"UUID": "io.github.manuelseverin.opencorsair",
+	"URL": "https://github.com/ManuelSeverin/OpenCorsair",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.4"
+	},
+	"CodePaths": {
+		"x86_64-unknown-linux-gnu": "plugin.py",
+		"aarch64-unknown-linux-gnu": "plugin.py"
+	},
+	"CodePathLin": "plugin.py",
+	"Icon": "icons/plugin",
+	"Category": "OpenCorsair",
+	"CategoryIcon": "icons/category",
+	"OS": [
+		{
+			"Platform": "linux",
+			"MinimumVersion": "5"
+		}
+	],
+	"Actions": [
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.mute",
+			"Name": "Mic Mute",
+			"Icon": "icons/mute-muted",
+			"Tooltip": "Mute the headset microphone, like the headset button",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/mute-live",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/mute-muted",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.anc",
+			"Name": "Noise Cancelling",
+			"Icon": "icons/anc-on",
+			"Tooltip": "Switch noise cancelling: off, on, transparency",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/anc-off",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/anc-on",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/anc-transparency",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.sidetone",
+			"Name": "Sidetone",
+			"Icon": "icons/sidetone-on",
+			"Tooltip": "Turn sidetone on/off or change its level",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad",
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Rotate": "Sidetone level",
+					"Push": "Sidetone on/off",
+					"Touch": "Sidetone on/off"
+				}
+			},
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/sidetone-off",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/sidetone-on",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.brightness",
+			"Name": "LED Brightness",
+			"Icon": "icons/brightness",
+			"Tooltip": "Change the LED brightness of the headset",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad",
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Rotate": "Brightness",
+					"Push": "LEDs off / full",
+					"Touch": "LEDs off / full"
+				}
+			},
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/brightness",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.autooff",
+			"Name": "Auto Power-Off",
+			"Icon": "icons/autooff",
+			"Tooltip": "Change the auto power-off timer",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/autooff",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.micled",
+			"Name": "Mic LED",
+			"Icon": "icons/micled-on",
+			"Tooltip": "Turn the microphone LED on or off",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/micled-off",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/micled-on",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.wheel",
+			"Name": "Earcup Wheel",
+			"Icon": "icons/wheel-system",
+			"Tooltip": "Choose what an earcup wheel controls",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true,
+			"States": [
+				{
+					"Image": "icons/wheel-system",
+					"TitleAlignment": "bottom",
+					"FontSize": "11"
+				},
+				{
+					"Image": "icons/wheel-bluetooth",
+					"TitleAlignment": "bottom",
+					"FontSize": "11"
+				},
+				{
+					"Image": "icons/wheel-off",
+					"TitleAlignment": "bottom",
+					"FontSize": "11"
+				}
+			]
+		},
+		{
+			"UUID": "io.github.manuelseverin.opencorsair.battery",
+			"Name": "Battery",
+			"Icon": "icons/battery",
+			"Tooltip": "Show the headset battery level",
+			"PropertyInspectorPath": "pi/index.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": false,
+			"States": [
+				{
+					"Image": "icons/battery",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/battery-charging",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				},
+				{
+					"Image": "icons/battery-off",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		}
+	]
+}

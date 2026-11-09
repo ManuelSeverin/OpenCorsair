@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCorsair</title>
+<style>
+	html, body {
+		margin: 0;
+		background: #2d2d2d;
+		color: #d8d8d8;
+		font: 9pt system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	}
+	body { padding: 8px 10px; }
+	.row { display: flex; align-items: center; gap: 8px; margin: 6px 0; min-height: 26px; }
+	.row[hidden] { display: none; }
+	label { flex: 0 0 92px; color: #9a9a9a; font-weight: 600; }
+	select, input {
+		flex: 1;
+		min-width: 0;
+		box-sizing: border-box;
+		height: 26px;
+		background: #3d3d3d;
+		color: #d8d8d8;
+		border: 1px solid #3a3a3a;
+		border-radius: 3px;
+		padding: 0 6px;
+		font: inherit;
+	}
+	select:focus, input:focus { outline: 1px solid #3e8bff; }
+	.status { display: flex; gap: 8px; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #454545; }
+	#status { flex: 1; color: #9a9a9a; line-height: 1.4; }
+	button {
+		background: #3d3d3d; color: #d8d8d8; border: 1px solid #969696; border-radius: 3px;
+		padding: 3px 10px; font: inherit; cursor: pointer;
+	}
+	button:hover { border-color: #3e8bff; }
+	.hint { color: #7a7a7a; margin: 4px 0 0 100px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="fields"></div>
+<div class="status">
+	<span id="status">Connecting…</span>
+	<button id="refresh" type="button">Refresh</button>
+</div>
+<script>
+// Field definitions per action. `show(settings)` hides fields that do not
+// apply to the chosen key action.
+const ACTIONS = {
+	mute: [
+		{ key: "press", label: "On press", type: "select", default: "toggle", options: [
+			["toggle", "Toggle mute"],
+			["mute", "Mute"],
+			["unmute", "Unmute"],
+			["ptt", "Push to talk (hold to unmute)"],
+		], hint: "Uses the same mute and sound as the tray (Mute sound menu)." },
+	],
+	anc: [
+		{ key: "press", label: "On press", type: "select", default: "cycle", options: [
+			["cycle", "Cycle off → on → transparency"],
+			["toggle", "Toggle off / on"],
+			["toggle-transparency", "Toggle off / transparency"],
+			["on-transparency", "Toggle on / transparency"],
+			["off", "Set off"],
+			["on", "Set on"],
+			["transparency", "Set transparency"],
+		] },
+	],
+	sidetone: [
+		{ key: "press", label: "On press", type: "select", default: "toggle", options: [
+			["toggle", "Toggle on / off"],
+			["on", "Turn on"],
+			["off", "Turn off"],
+			["up", "Level up"],
+			["down", "Level down"],
+			["set", "Set level"],
+		] },
+		{ key: "step", label: "Step (%)", type: "number", default: 10, min: 1, max: 100,
+		  show: s => ["up", "down"].includes(s.press) },
+		{ key: "level", label: "Level (%)", type: "number", default: 50, min: 0, max: 100,
+		  show: s => s.press === "set" },
+		{ key: "dialStep", label: "Dial step (%)", type: "number", default: 5, min: 1, max: 50, encoder: true },
+	],
+	brightness: [
+		{ key: "press", label: "On press", type: "select", default: "cycle", options: [
+			["cycle", "Step up, wrap to 0"],
+			["up", "Brighter"],
+			["down", "Darker"],
+			["set", "Set brightness"],
+		] },
+		{ key: "step", label: "Step (%)", type: "number", default: 25, min: 1, max: 100,
+		  show: s => s.press !== "set" },
+		{ key: "value", label: "Brightness (%)", type: "number", default: 100, min: 0, max: 100,
+		  show: s => s.press === "set" },
+		{ key: "dialStep", label: "Dial step (%)", type: "number", default: 5, min: 1, max: 50, encoder: true },
+	],
+	autooff: [
+		{ key: "press", label: "On press", type: "select", default: "cycle", options: [
+			["cycle", "Cycle off → 5 → 10 → 15 → 30 → 60 → 90 min"],
+			["set", "Set timer"],
+		] },
+		{ key: "minutes", label: "Minutes", type: "number", default: 10, min: 0, max: 240,
+		  show: s => s.press === "set", hint: "0 turns auto power-off off." },
+	],
+	micled: [
+		{ key: "press", label: "On press", type: "select", default: "toggle", options: [
+			["toggle", "Toggle on / off"],
+			["on", "Turn on"],
+			["off", "Turn off"],
+		] },
+	],
+	wheel: [
+		{ key: "side", label: "Wheel", type: "select", default: "right", options: [
+			["left", "Left earcup"],
+			["right", "Right earcup"],
+		] },
+		{ key: "press", label: "On press", type: "select", default: "cycle", options: [
+			["cycle", "Cycle system → Bluetooth → off"],
+			["system", "System volume"],
+			["bluetooth", "Bluetooth volume"],
+			["off", "Off"],
+		] },
+	],
+	battery: [],
+};
+
+function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
+	actionInfo = JSON.parse(actionInfo);
+	const context = actionInfo.context;
+	const kind = actionInfo.action.split(".").pop();
+	const isEncoder = actionInfo.payload.controller === "Encoder";
+	const fields = (ACTIONS[kind] || []).filter(f => !f.encoder || isEncoder);
+	const settings = Object.assign({}, actionInfo.payload.settings || {});
+	for (const f of fields) if (settings[f.key] === undefined) settings[f.key] = f.default;
+
+	const ws = new WebSocket("ws://localhost:" + port);
+	const send = msg => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
+	const save = () => send({ event: "setSettings", context, payload: settings });
+	const toPlugin = payload => send({ event: "sendToPlugin", context, action: actionInfo.action, payload });
+
+	ws.onopen = () => {
+		send({ event: registerEvent, uuid });
+		save();               // store the defaults so the plugin sees them
+		toPlugin({});         // ask for the connection status
+	};
+	ws.onmessage = e => {
+		const msg = JSON.parse(e.data);
+		if (msg.event === "sendToPropertyInspector" && msg.payload && msg.payload.status)
+			document.getElementById("status").textContent = msg.payload.status;
+	};
+	document.getElementById("refresh").onclick = () => {
+		document.getElementById("status").textContent = "Reading headset…";
+		toPlugin({ refresh: true });
+	};
+
+	const root = document.getElementById("fields");
+	const rows = [];
+	for (const f of fields) {
+		const row = document.createElement("div");
+		row.className = "row";
+		const label = document.createElement("label");
+		label.textContent = f.label;
+		label.htmlFor = "f-" + f.key;
+		let input;
+		if (f.type === "select") {
+			input = document.createElement("select");
+			for (const [value, text] of f.options) input.appendChild(new Option(text, value));
+			input.value = settings[f.key];
+		} else {
+			input = document.createElement("input");
+			input.type = "number";
+			input.min = f.min;
+			input.max = f.max;
+			input.value = settings[f.key];
+		}
+		input.id = "f-" + f.key;
+		input.addEventListener("change", () => {
+			if (f.type === "number") {
+				let v = parseInt(input.value, 10);
+				if (isNaN(v)) v = f.default;
+				v = Math.max(f.min, Math.min(f.max, v));
+				input.value = v;
+				settings[f.key] = v;
+			} else {
+				settings[f.key] = input.value;
+			}
+			save();
+			update();
+		});
+		row.append(label, input);
+		root.appendChild(row);
+		if (f.hint) {
+			const hint = document.createElement("div");
+			hint.className = "hint";
+			hint.textContent = f.hint;
+			root.appendChild(hint);
+			rows.push([f, hint]);
+		}
+		rows.push([f, row]);
+	}
+	const update = () => {
+		for (const [f, el] of rows) el.hidden = f.show ? !f.show(settings) : false;
+	};
+	update();
+}
+</script>
+</body>
+</html>

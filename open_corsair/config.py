@@ -7,6 +7,11 @@ from pathlib import Path
 
 DEFAULTS = {
     "mute_sound": "soft",  # off | soft | beeps
+    # LED effect, see lighting.EFFECTS; "device" leaves the LEDs alone
+    "led_effect": "device",
+    "led_left": "#ff3c00",
+    "led_right": "#ff3c00",
+    "led_speed": "medium",
 }
 
 

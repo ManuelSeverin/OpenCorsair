@@ -17,12 +17,22 @@ Supported right now:
 - **Tray indicator** showing the battery level, colour-coded, with a
   charging state and a low-battery notification
 - **Mic mute** via the headset button, handled on the host like iCUE does
-- Settings from the tray menu or the command line:
+- **Settings window** with a picture of the headset, live battery and mute
+  status. Open it with a left click on the tray icon or "Settings…" in the
+  tray menu (`open-corsair tray --settings` opens it on start).
+- Settings in the window, the tray menu or on the command line:
   - noise cancelling: off, on, transparency
-  - sidetone: on/off and level
+  - sidetone: on/off and level. As in iCUE, noise cancelling and sidetone
+    turn each other off.
   - auto power-off timer
   - mic mute LED
-  - LED brightness (CLI only)
+  - LED brightness (window and CLI)
+  - earcup wheels: system volume, Bluetooth volume or off (window and CLI)
+- **Lighting** (window and tray menu, while the tray runs): static colours per
+  earcup, pulse, colour shift, rainbow or off. Effects are drawn on the PC and
+  sent to the headset, like iCUE does. Animated effects send 20 updates a
+  second over the radio, which costs some battery. "Headset default" leaves
+  the LEDs alone.
 
 ## Install
 
@@ -79,14 +89,41 @@ python3 -m open_corsair.cli tray
 
 ```console
 $ open-corsair status
-Virtuoso MAX Wireless: 12% (discharging, 3672 mV, fw 0.37.493)
+Virtuoso MAX Wireless: 12% (discharging)
 $ open-corsair status --json
 $ open-corsair settings
 $ open-corsair set anc transparency        # off | on | transparency
 $ open-corsair set sidetone 40             # on | off | 0-100
 $ open-corsair set auto-off 10             # off | minutes
 $ open-corsair set mic-led on
+$ open-corsair set wheel-right system      # system | bluetooth | off
 ```
+
+## OpenDeck / Stream Deck plugin
+
+The `opendeck/` folder holds a plugin for [OpenDeck](https://github.com/nekename/OpenDeck)
+with keys for mic mute, noise cancelling, sidetone, LED brightness, auto
+power-off, mic LED, earcup wheels and battery level. Each key shows the current value,
+and its settings choose what a press does (cycle, toggle, set a value, step
+up/down). Sidetone and brightness also work on Stream Deck+ dials.
+
+```sh
+packaging/build-opendeck-plugin.sh --install   # then restart OpenDeck
+```
+
+This builds `dist/OpenCorsair-<version>.streamDeckPlugin` and copies the
+plugin to `~/.config/opendeck/plugins/`. The plugin only needs `python3`
+(3.10+) and the udev rule; it brings its own copy of the device code, so it
+works next to the AppImage. It can run while the tray runs. Without the tray,
+each change switches the headset to software mode for the write, as
+`open-corsair set` does. The tray menu and settings window read the settings
+again when they open, so they show changes made on the deck. Lighting effects
+stay in the tray, since the tray draws them.
+
+The mute key mutes the headset microphone in PipeWire, the same way the tray
+does, and plays the sound chosen under "Mute sound" in the tray. It can
+toggle, mute, unmute or work as push to talk. The key and the tray icon follow
+each other and the headset button right away.
 
 ### How mute works
 
@@ -120,3 +157,6 @@ Protocol details were checked against
 [OpenLinkHub](https://github.com/jurkovic-nikola/OpenLinkHub) and
 [HeadsetControl](https://github.com/Sapd/HeadsetControl), and against the
 device manifests shipped with iCUE.
+
+The headset picture in `open_corsair/assets/` comes from the device files of
+Corsair iCUE (photo plus cut-out mask). It belongs to Corsair.

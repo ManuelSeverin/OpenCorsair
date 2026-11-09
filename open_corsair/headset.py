@@ -12,8 +12,10 @@ from .bragi import (
     Bragi,
     BragiError,
     Cmd,
+    File,
     Mode,
     Prop,
+    WheelFunction,
 )
 from .hidraw import enumerate_hidraw
 
@@ -22,6 +24,8 @@ SUPPORTED = {
     0x2A02: "Virtuoso MAX Wireless",
 }
 BRAGI_USAGE_PAGE = 0xFF42
+LED_COUNT = 6        # 0-2 left earcup, 3-5 right earcup
+LED_HANDLE = 0
 
 
 @dataclass
@@ -50,6 +54,9 @@ class HeadsetSettings:
     sleep_minutes: int | None    # None = auto-off disabled
     mic_led: bool | None
     brightness: int | None       # percent
+    # earcup wheels: a WheelFunction value, 0 = wheel disabled, None = unknown
+    wheel_left: int | None = None
+    wheel_right: int | None = None
 
 
 def find_receiver() -> tuple[str, str, str] | None:
@@ -67,6 +74,7 @@ class Headset:
         # as used in ALSA/PipeWire device names, e.g. "Corsair_CORSAIR_VIRTUOSO_..."
         self.usb_name = usb_name.replace(" ", "_")
         self.bragi = Bragi(path)
+        self._leds_open = False
 
     @classmethod
     def open(cls) -> "Headset":
@@ -132,6 +140,13 @@ class Headset:
         bright = g(Prop.BRIGHTNESS, 2)
         sleep_on = g(Prop.SLEEP_ENABLED, 1)
         sleep_ms = g(Prop.SLEEP_TIMEOUT_MS)
+
+        def wheel(fn_prop: int, en_prop: int) -> int | None:
+            fn, en = g(fn_prop, 1), g(en_prop, 1)
+            if en == 0:
+                return 0
+            return fn if fn in WheelFunction._value2member_map_ else None
+
         return HeadsetSettings(
             sidetone_on=g(Prop.SIDETONE_MUTE, 1) == 0,
             sidetone_level=round((g(Prop.SIDETONE_LEVEL, 2) or 0) / 10),
@@ -139,6 +154,8 @@ class Headset:
             sleep_minutes=round(sleep_ms / 60000) if sleep_on and sleep_ms else None,
             mic_led=None if mic_led is None else mic_led != 0,
             brightness=None if bright is None else round(bright / 10),
+            wheel_left=wheel(Prop.WHEEL_LEFT, Prop.WHEEL_LEFT_ENABLED),
+            wheel_right=wheel(Prop.WHEEL_RIGHT, Prop.WHEEL_RIGHT_ENABLED),
         )
 
     # -- operating mode ----------------------------------------------------
@@ -156,9 +173,11 @@ class Headset:
         Only the headset is switched; the receiver stays in hardware mode.
         """
         self.bragi.set_int(TARGET_HEADSET, Prop.MODE, Mode.SOFTWARE, 1)
+        self._leds_open = False
 
     def leave_software_mode(self) -> None:
         self.bragi.set_int(TARGET_HEADSET, Prop.MODE, Mode.HARDWARE, 1)
+        self._leds_open = False
 
     def heartbeat(self) -> None:
         """Keep software mode alive; the headset falls back without host traffic."""
@@ -197,14 +216,25 @@ class Headset:
                     self.bragi.set_int(TARGET_HEADSET, prop, value, size)
             return True
 
+    # Noise cancelling and sidetone exclude each other, as in iCUE: turning
+    # one on turns the other off. The headset itself does not enforce this.
+    # Transparency mode is left alone.
     def set_sidetone(self, on: bool, level: int | None = None) -> bool:
         props = [(Prop.SIDETONE_MUTE, 0 if on else 1, 1)]
         if level is not None:
             props.append((Prop.SIDETONE_LEVEL, max(0, min(100, level)) * 10, 2))
+        if on:
+            with self.bragi.locked():
+                if self._get_opt(Prop.ANC, 1) == AncMode.ON:
+                    props.insert(0, (Prop.ANC, int(AncMode.OFF), 1))
+                return self.write(*props)
         return self.write(*props)
 
     def set_anc(self, mode: AncMode) -> bool:
-        return self.write((Prop.ANC, int(mode), 1))
+        props = [(Prop.ANC, int(mode), 1)]
+        if mode == AncMode.ON:
+            props.append((Prop.SIDETONE_MUTE, 1, 1))
+        return self.write(*props)
 
     def set_sleep(self, minutes: int | None) -> bool:
         if minutes:
@@ -217,6 +247,48 @@ class Headset:
 
     def set_brightness(self, percent: int) -> bool:
         return self.write((Prop.BRIGHTNESS, max(0, min(100, percent)) * 10, 2))
+
+    def set_wheel(self, side: str, function: int) -> bool:
+        """side "left"/"right"; function a WheelFunction, or 0 to disable the wheel."""
+        fn_prop, en_prop = {
+            "left": (Prop.WHEEL_LEFT, Prop.WHEEL_LEFT_ENABLED),
+            "right": (Prop.WHEEL_RIGHT, Prop.WHEEL_RIGHT_ENABLED),
+        }[side]
+        if not function:
+            return self.write((en_prop, 0, 1))
+        return self.write((fn_prop, int(WheelFunction(function)), 1), (en_prop, 1, 1))
+
+    # -- LEDs ------------------------------------------------------------
+    def set_leds(self, colors: list[tuple[int, int, int]]) -> None:
+        """Show one (r, g, b) per LED. Software mode only; the brightness
+        setting (prop 0x02) still applies on top."""
+        data = bytes([0x12, 0x00]) + b"".join(bytes(c) for c in colors[:LED_COUNT])
+        args = bytes([LED_HANDLE]) + len(data).to_bytes(4, "little") + data
+        with self.bragi.locked():
+            if not self._leds_open:
+                self._open_leds()
+            try:
+                self.bragi.request(TARGET_HEADSET, Cmd.WRITE_BEGIN, args)
+            except BragiError:
+                # the handle is gone, e.g. after the headset was power-cycled
+                self._open_leds()
+                self.bragi.request(TARGET_HEADSET, Cmd.WRITE_BEGIN, args)
+
+    def _open_leds(self) -> None:
+        self._leds_open = False
+        open_args = bytes([LED_HANDLE]) + File.LED_BUFFER.to_bytes(2, "little")
+        try:
+            self.bragi.request(TARGET_HEADSET, Cmd.OPEN, open_args)
+        except BragiError:
+            # still open from an earlier session: close and open again
+            with contextlib.suppress(BragiError):
+                self.bragi.request(TARGET_HEADSET, Cmd.CLOSE, bytes([0x01, LED_HANDLE]))
+            self.bragi.request(TARGET_HEADSET, Cmd.OPEN, open_args)
+        self._leds_open = True
+
+    def forget_leds(self) -> None:
+        """Open the LED handle again before the next frame."""
+        self._leds_open = False
 
     def firmware(self) -> str:
         v = self.bragi.get(TARGET_HEADSET, Prop.FIRMWARE)

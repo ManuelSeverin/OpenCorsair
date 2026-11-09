@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
-  <rect width="1080" height="1080" rx="240" fill="#11161c"/>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4656"/><stop offset="1" stop-color="#1c232c"/></linearGradient></defs>
+  <rect width="1080" height="1080" rx="240" fill="url(#bg)"/>
+  <rect x="32.0" y="32.0" width="1016" height="1016" rx="208.0" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="64"/>
   <g fill="#f2f3f7" transform="translate(540 540)"><path d="M0 0A297.2 297.2 0 0 1 430 0A297.2 297.2 0 0 1 0 0Z" transform="rotate(55)"/><path d="M0 0A297.2 297.2 0 0 1 430 0A297.2 297.2 0 0 1 0 0Z" transform="rotate(175)"/><path d="M0 0A297.2 297.2 0 0 1 430 0A297.2 297.2 0 0 1 0 0Z" transform="rotate(295)"/></g>
 </svg>

@@ -37,7 +37,15 @@ TARGET_HEADSET = 0x09
 class Cmd(enum.IntEnum):
     SET = 0x01
     GET = 0x02
+    CLOSE = 0x05        # <0x01> <handle>
+    WRITE_BEGIN = 0x06  # <handle> <u32 total length> <data...>
+    OPEN = 0x0D         # <handle> <u16 file id>
     HEARTBEAT = 0x12
+
+
+class File(enum.IntEnum):
+    """Bragi file ids, opened on a handle with Cmd.OPEN."""
+    LED_BUFFER = 0x22   # live LED colours: u16 0x0012, then R G B per LED
 
 
 class Event(enum.IntEnum):
@@ -47,6 +55,7 @@ class Event(enum.IntEnum):
 
 
 KEY_MIC = 0x01
+KEY_CUSTOM = 0x02   # second button (iCUE: Headset_Custom), unverified
 
 
 class Mode(enum.IntEnum):
@@ -75,12 +84,20 @@ class Prop(enum.IntEnum):
     WHEEL_LEFT = 0xD2
     WHEEL_RIGHT = 0xD3
     MIC_LED = 0xD4           # LED lit while mic is unmuted: 0 = off, 2 = on
+    WHEEL_LEFT_ENABLED = 0xF6
+    WHEEL_RIGHT_ENABLED = 0xF7
 
 
 class AncMode(enum.IntEnum):
     OFF = 0
     ON = 1
     TRANSPARENCY = 2
+
+
+class WheelFunction(enum.IntEnum):
+    """What an earcup wheel controls (props 0xd2/0xd3)."""
+    SYSTEM_VOLUME = 1
+    BLUETOOTH_VOLUME = 2
 
 
 class BatteryStatus(enum.IntEnum):

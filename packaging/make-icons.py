@@ -22,23 +22,34 @@ def blades(L, h, angles=(55, 175, 295)):
     return (f'<g fill="#f2f3f7" transform="translate({C} {C})">'
             + "".join(f'<path d="{d}" transform="rotate({a})"/>' for a in angles) + "</g>")
 
-def svg(body):
+# Tile: slate gradient plus a light rim, so it stays visible on dark panels
+# and still reads as a tile on light ones. The rim is thicker for the small
+# variants so it survives downscaling to 16-32 px.
+TOP, BOTTOM, HUB = "#3a4656", "#1c232c", "#29323d"
+
+def svg(body, rim=24):
+    i = rim / 2
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">\n'
-            '  <rect width="1080" height="1080" rx="240" fill="#11161c"/>\n  ' + "\n  ".join(body) + "\n</svg>\n")
+            '  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{TOP}"/><stop offset="1" stop-color="{BOTTOM}"/></linearGradient></defs>\n'
+            '  <rect width="1080" height="1080" rx="240" fill="url(#bg)"/>\n'
+            f'  <rect x="{i}" y="{i}" width="{1080 - rim}" height="{1080 - rim}" rx="{240 - i}" '
+            f'fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="{rim}"/>\n  '
+            + "\n  ".join(body) + "\n</svg>\n")
 
 BLUE, ORANGE, GREEN = "#3e8bff", "#ff8a3d", "#3fc4a5"
 full = svg([
     '<g fill="none" stroke-width="63" stroke-linecap="round">'
     + arc(-60, 14, 376.5, BLUE) + arc(30, 104, 376.5, ORANGE) + arc(120, 194, 376.5, GREEN) + "</g>",
     blades(330, 58),
-    f'<circle cx="{C}" cy="{C}" r="62" fill="#11161c"/>',
+    f'<circle cx="{C}" cy="{C}" r="62" fill="{HUB}"/>',
     f'<circle cx="{C}" cy="{C}" r="29" fill="{BLUE}"/>',
 ])
 medium = svg([
     f'<g fill="none" stroke-width="105" stroke-linecap="round">{arc(-62, 242, 350, BLUE)}</g>',
     blades(330, 70),
-])
-small = svg([blades(430, 92)])
+], rim=44)
+small = svg([blades(430, 92)], rim=64)
 open(f"{out}/opencorsair.svg", "w").write(full)
 open(f"{out}/opencorsair-medium.svg", "w").write(medium)
 open(f"{out}/opencorsair-small.svg", "w").write(small)

@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from .bragi import AncMode, BragiError
+from .bragi import AncMode, BragiError, WheelFunction
 from .headset import Headset
 
 
@@ -17,6 +17,19 @@ def on_off(v: str) -> bool:
     raise argparse.ArgumentTypeError("expected on/off")
 
 
+WHEEL_NAMES = {WheelFunction.SYSTEM_VOLUME: "system", WheelFunction.BLUETOOTH_VOLUME: "bluetooth"}
+
+
+def wheel_function(v: str) -> int:
+    v = v.lower()
+    if v == "off":
+        return 0
+    for fn, name in WHEEL_NAMES.items():
+        if v == name:
+            return fn
+    raise ValueError(f"expected system, bluetooth or off, got {v!r}")
+
+
 def cmd_settings(args) -> int:
     with Headset.open() as hs:
         st = hs.read_settings()
@@ -26,6 +39,9 @@ def cmd_settings(args) -> int:
     print(f"auto-off:   {f'{st.sleep_minutes} min' if st.sleep_minutes else 'off'}")
     print(f"mic led:    {'on' if st.mic_led else 'off'}")
     print(f"brightness: {st.brightness}%")
+    for side, v in (("left", st.wheel_left), ("right", st.wheel_right)):
+        name = "?" if v is None else "off" if v == 0 else WHEEL_NAMES.get(v, str(v))
+        print(f"{side + ' wheel:':<12} {name}")
     return 0
 
 
@@ -49,6 +65,8 @@ def cmd_set(args) -> int:
                 hs.set_mic_led(on_off(args.value))
             elif args.what == "brightness":
                 hs.set_brightness(int(args.value))
+            elif args.what in ("wheel-left", "wheel-right"):
+                hs.set_wheel(args.what.split("-")[1], wheel_function(args.value))
         except (ValueError, KeyError, argparse.ArgumentTypeError) as e:
             print(f"invalid value: {e}", file=sys.stderr)
             return 2
@@ -82,7 +100,7 @@ def cmd_status(args) -> int:
     elif not st.connected:
         print(f"{model}: headset not connected")
     else:
-        print(f"{model}: {int(st.battery)}% ({st.status.name.lower()}, {st.voltage_mv} mV, fw {fw})")
+        print(f"{model}: {int(st.battery)}% ({st.status.name.lower()})")
     return 0
 
 
@@ -91,12 +109,14 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd")
     s = sub.add_parser("status", help="show headset battery")
     s.add_argument("--json", action="store_true")
-    sub.add_parser("tray", help="run the system tray indicator")
+    t = sub.add_parser("tray", help="run the system tray indicator")
+    t.add_argument("--settings", action="store_true", help="open the settings window on start")
     sub.add_parser("settings", help="show headset settings")
     st = sub.add_parser("set", help="change a headset setting", description=(
         "sidetone on|off|0-100, anc off|on|transparency, auto-off off|<minutes>, "
-        "mic-led on|off, brightness 0-100"))
-    st.add_argument("what", choices=["sidetone", "anc", "auto-off", "mic-led", "brightness"])
+        "mic-led on|off, brightness 0-100, wheel-left|wheel-right system|bluetooth|off"))
+    st.add_argument("what", choices=["sidetone", "anc", "auto-off", "mic-led", "brightness",
+                                     "wheel-left", "wheel-right"])
     st.add_argument("value")
     args = p.parse_args()
     if args.cmd == "settings":
@@ -105,7 +125,7 @@ def main() -> None:
         sys.exit(cmd_set(args))
     if args.cmd == "tray":
         from .tray import main as tray_main
-        tray_main()
+        tray_main(show_settings=args.settings)
     else:
         if args.cmd is None:
             args.json = False
