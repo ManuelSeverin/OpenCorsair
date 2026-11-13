@@ -120,6 +120,10 @@ up/down). Sidetone and brightness also work on Stream Deck+ dials.
 packaging/build-streamdeck-plugin.sh --install   # then restart OpenDeck
 ```
 
+Start OpenDeck through `tools/start-opendeck.sh`, which runs
+`env -u WAYLAND_DISPLAY GDK_BACKEND=x11 /usr/bin/opendeck`. As a native
+Wayland client OpenDeck makes the mouse stutter.
+
 This builds `dist/OpenCorsair-<version>.streamDeckPlugin` and copies the
 plugin to `~/.config/opendeck/plugins/`. The plugin only needs `python3`
 (3.10+) and the udev rule; it brings its own copy of the device code, so it
