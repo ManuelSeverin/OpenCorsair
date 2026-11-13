@@ -221,17 +221,17 @@
 			"SupportedInMultiActions": false,
 			"States": [
 				{
-					"Image": "icons/battery",
+					"Image": "icons/key-battery",
 					"TitleAlignment": "bottom",
 					"FontSize": "12"
 				},
 				{
-					"Image": "icons/battery-charging",
+					"Image": "icons/key-battery-charging",
 					"TitleAlignment": "bottom",
 					"FontSize": "12"
 				},
 				{
-					"Image": "icons/battery-off",
+					"Image": "icons/key-battery-off",
 					"TitleAlignment": "bottom",
 					"FontSize": "12"
 				}

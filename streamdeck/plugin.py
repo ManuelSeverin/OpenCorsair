@@ -60,6 +60,15 @@ WHEEL_TITLES = {WheelFunction.SYSTEM_VOLUME: "System", WheelFunction.BLUETOOTH_V
 WHEEL_STATES = {WheelFunction.SYSTEM_VOLUME: 0, WheelFunction.BLUETOOTH_VOLUME: 1, 0: 2}
 
 
+# -- battery key image (same layout as the OpenKeychron plugin) --------------
+BG = "#15191f"
+FG = "#f2f3f7"
+DIM = "#6b7686"
+TRACK = "#2c333d"
+FONT = ('font-family="Liberation Sans, DejaVu Sans, Segoe UI, Arial, sans-serif" '
+        'font-weight="bold"')
+
+
 def battery_color(pct: float, charging: bool) -> str:
     """Same colours as the tray icon."""
     if charging:
@@ -71,32 +80,54 @@ def battery_color(pct: float, charging: bool) -> str:
     return "#27ae60"
 
 
-def battery_image(st: HeadsetState | None) -> str:
-    """Key image in the style of the tray icon: battery outline, coloured
-    fill for the level, the percentage (or a bolt while charging) inside."""
+def headset_glyph(x: float, y: float, size: float, color: str) -> str:
+    """Headset pictogram in a size x size box at (x, y)."""
+    body = (f'<path d="M7.5 25V20A12.5 12.5 0 0 1 32.5 20V25" fill="none" stroke="{color}" '
+            f'stroke-width="3.2" stroke-linecap="round"/>'
+            f'<rect x="3.5" y="21" width="9" height="15" rx="3.5" fill="{color}"/>'
+            f'<rect x="27.5" y="21" width="9" height="15" rx="3.5" fill="{color}"/>')
+    return f'<g transform="translate({x} {y}) scale({size / 40})">{body}</g>'
+
+
+def bolt(x: float, y: float, h: float, color: str = FG) -> str:
+    """Lightning bolt, h high, top left corner at (x, y)."""
+    s = h / 64
+    return (f'<path transform="translate({x} {y}) scale({s})" d="M26 0 L0 36 H18 L10 64 L38 26 H20 Z" '
+            f'fill="{color}" stroke="#000" stroke-width="{3 / s:.1f}" stroke-linejoin="round" paint-order="stroke"/>')
+
+
+def bar(x: float, y: float, w: float, h: float, pct: float | None, color: str) -> str:
+    out = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{h / 2}" fill="{TRACK}"/>'
+    if pct is not None and pct > 0:
+        fw = max(h, w * min(pct, 100) / 100)
+        out += f'<rect x="{x}" y="{y}" width="{fw:.1f}" height="{h}" rx="{h / 2}" fill="{color}"/>'
+    return out
+
+
+def battery_svg(st: HeadsetState | None) -> str:
+    """Battery key: headset glyph, percentage, level bar and a label; a bolt
+    while on the charger, a dash while the headset is off or out of range."""
     connected = st is not None and st.connected and st.battery is not None
-    outline = "#f2f3f7" if connected else "#6b7686"
-    body = (f'<rect x="12" y="34" width="108" height="76" rx="15" fill="none" '
-            f'stroke="{outline}" stroke-width="10"/>'
-            f'<rect x="122" y="56" width="12" height="32" rx="4" fill="{outline}"/>')
-    halo = 'stroke="#000" stroke-width="7" stroke-linejoin="round" paint-order="stroke"'
-    if not connected:
-        inner = f'<rect x="46" y="67" width="40" height="10" rx="4" fill="{outline}"/>'
-    else:
+    fg = FG if connected else DIM
+    out = f'<rect width="144" height="144" fill="{BG}"/>' + headset_glyph(8, 6, 38, fg)
+    if connected:
         pct = max(0.0, min(100.0, st.battery))
-        width = 84 * pct / 100
-        inner = (f'<rect x="24" y="46" width="{width:.1f}" height="52" rx="5" '
-                 f'fill="{battery_color(pct, st.on_charger)}"/>')
         if st.on_charger:
-            inner += (f'<path d="M74 40 L48 76 H66 L58 104 L86 66 H68 Z" fill="#f2f3f7" {halo}/>')
-        else:
-            text = str(int(pct))  # truncated, like the tray and iCUE
-            size = 50 if len(text) < 3 else 40
-            inner += (f'<text x="66" y="72" font-family="Liberation Sans, DejaVu Sans, Segoe UI, Arial, sans-serif" '
-                      f'font-weight="bold" font-size="{size}" text-anchor="middle" '
-                      f'dominant-baseline="central" fill="#f2f3f7" {halo}>{text}</text>')
-    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">{body}{inner}</svg>'
-    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+            out += bolt(112, 8, 30)
+        value = int(pct)  # truncated, like the tray and iCUE
+        size = 46 if value < 100 else 40
+        out += (f'<text x="72" y="88" {FONT} font-size="{size}" text-anchor="middle" fill="{FG}">'
+                f'{value}<tspan font-size="24" dx="1">%</tspan></text>')
+        out += bar(14, 98, 116, 12, pct, battery_color(pct, st.on_charger))
+    else:
+        out += f'<text x="72" y="88" {FONT} font-size="40" text-anchor="middle" fill="{DIM}">–</text>'
+        out += bar(14, 98, 116, 12, None, DIM)
+    out += f'<text x="72" y="134" {FONT} font-size="20" text-anchor="middle" fill="{fg}">Headset</text>'
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">{out}</svg>'
+
+
+def battery_image(st: HeadsetState | None) -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(battery_svg(st).encode()).decode()
 
 
 LOG_FILE = HERE / "logs" / "opencorsair.log"

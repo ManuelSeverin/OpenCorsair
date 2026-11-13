@@ -114,7 +114,7 @@ case "${1:-}" in
         mkdir -p "$PLUGINS"
         rm -rf "$PLUGINS/$ID.sdPlugin"
         cp -r "$DIST/$ID.sdPlugin" "$PLUGINS/"
-        echo "installed to $PLUGINS/$ID.sdPlugin, restart OpenDeck to load it"
+        echo "installed to $PLUGINS/$ID.sdPlugin, restart OpenDeck (tools/start-opendeck.sh) to load it"
         ;;
     "")
         build_linux
