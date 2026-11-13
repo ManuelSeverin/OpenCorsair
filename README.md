@@ -139,6 +139,11 @@ toggle, mute, unmute or work as push to talk. The key and the tray icon follow
 each other and the headset button right away. Each mute key can also pick its
 own sound.
 
+The battery key shows the mic mute state too: a white microphone while live,
+a red, struck-through one and the label "Muted" while muted. Pressing it mutes
+or unmutes the mic, like the mute key. In its settings the press can be set
+to "Read battery now" instead.
+
 ### Elgato Stream Deck on Windows
 
 The same plugin also runs in the Elgato Stream Deck app on Windows 10/11:

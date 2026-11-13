@@ -45,6 +45,7 @@ PREFIX = "io.github.manuelseverin.opencorsair."
 POLL_S = 60          # battery and settings refresh while keys are visible
 MUTE_POLL_S = 1.0    # Windows: how often the mute key checks the mic mute
 WINDOWS = sys.platform == "win32"
+MUTE_KEYS = ("mute", "battery")   # keys that show the mic mute state
 AUTO_OFF_STEPS = (0, 5, 10, 15, 30, 60, 90)
 ANC_CYCLES = {
     "cycle": (AncMode.OFF, AncMode.ON, AncMode.TRANSPARENCY),
@@ -64,6 +65,7 @@ WHEEL_STATES = {WheelFunction.SYSTEM_VOLUME: 0, WheelFunction.BLUETOOTH_VOLUME: 
 BG = "#15191f"
 FG = "#f2f3f7"
 DIM = "#6b7686"
+RED = "#da4453"
 TRACK = "#2c333d"
 FONT = ('font-family="Liberation Sans, DejaVu Sans, Segoe UI, Arial, sans-serif" '
         'font-weight="bold"')
@@ -96,6 +98,19 @@ def bolt(x: float, y: float, h: float, color: str = FG) -> str:
             f'fill="{color}" stroke="#000" stroke-width="{3 / s:.1f}" stroke-linejoin="round" paint-order="stroke"/>')
 
 
+def mic_glyph(x: float, y: float, size: float, muted: bool) -> str:
+    """Microphone in a size x size box at (x, y): white while live, red and
+    struck through while muted."""
+    c = RED if muted else FG
+    body = (f'<rect x="14" y="3" width="12" height="21" rx="6" fill="{c}"/>'
+            f'<path d="M8 18A12 12 0 0 0 32 18M20 30V37M13 37H27" fill="none" stroke="{c}" '
+            f'stroke-width="3.2" stroke-linecap="round"/>')
+    if muted:
+        body += (f'<path d="M6 4L34 36" stroke="{BG}" stroke-width="8" stroke-linecap="round"/>'
+                 f'<path d="M6 4L34 36" stroke="{c}" stroke-width="3.6" stroke-linecap="round"/>')
+    return f'<g transform="translate({x} {y}) scale({size / 40})">{body}</g>'
+
+
 def bar(x: float, y: float, w: float, h: float, pct: float | None, color: str) -> str:
     out = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{h / 2}" fill="{TRACK}"/>'
     if pct is not None and pct > 0:
@@ -104,16 +119,19 @@ def bar(x: float, y: float, w: float, h: float, pct: float | None, color: str) -
     return out
 
 
-def battery_svg(st: HeadsetState | None) -> str:
-    """Battery key: headset glyph, percentage, level bar and a label; a bolt
-    while on the charger, a dash while the headset is off or out of range."""
+def battery_svg(st: HeadsetState | None, muted: bool | None = None) -> str:
+    """Battery key: headset glyph, mic mute state, percentage, level bar and a
+    label ("Muted" in red while the mic is muted); a bolt while on the charger,
+    a dash while the headset is off or out of range."""
     connected = st is not None and st.connected and st.battery is not None
     fg = FG if connected else DIM
     out = f'<rect width="144" height="144" fill="{BG}"/>' + headset_glyph(8, 6, 38, fg)
+    if muted is not None:
+        out += mic_glyph(100, 6, 38, muted)
     if connected:
         pct = max(0.0, min(100.0, st.battery))
         if st.on_charger:
-            out += bolt(112, 8, 30)
+            out += bolt(64 if muted is not None else 112, 8, 30)
         value = int(pct)  # truncated, like the tray and iCUE
         size = 46 if value < 100 else 40
         out += (f'<text x="72" y="88" {FONT} font-size="{size}" text-anchor="middle" fill="{FG}">'
@@ -122,12 +140,13 @@ def battery_svg(st: HeadsetState | None) -> str:
     else:
         out += f'<text x="72" y="88" {FONT} font-size="40" text-anchor="middle" fill="{DIM}">–</text>'
         out += bar(14, 98, 116, 12, None, DIM)
-    out += f'<text x="72" y="134" {FONT} font-size="20" text-anchor="middle" fill="{fg}">Headset</text>'
+    label, color = ("Muted", RED) if muted else ("Headset", fg)
+    out += f'<text x="72" y="134" {FONT} font-size="20" text-anchor="middle" fill="{color}">{label}</text>'
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">{out}</svg>'
 
 
-def battery_image(st: HeadsetState | None) -> str:
-    return "data:image/svg+xml;base64," + base64.b64encode(battery_svg(st).encode()).decode()
+def battery_image(st: HeadsetState | None, muted: bool | None = None) -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(battery_svg(st, muted).encode()).decode()
 
 
 LOG_FILE = HERE / "logs" / "opencorsair.log"
@@ -347,7 +366,7 @@ class Plugin:
         if muted != self.muted:
             self.muted = muted
             for ctx, info in list(self.contexts.items()):
-                if info["action"] == "mute":
+                if info["action"] in MUTE_KEYS:
                     await self.render(ctx)
 
     def schedule_mute_refresh(self) -> None:
@@ -370,7 +389,7 @@ class Plugin:
             # no change events without a COM callback: ask the mixer instead
             while True:
                 await asyncio.sleep(MUTE_POLL_S)
-                if any(i["action"] == "mute" for i in self.contexts.values()):
+                if any(i["action"] in MUTE_KEYS for i in self.contexts.values()):
                     self.schedule_mute_refresh()
         while True:
             try:
@@ -418,7 +437,7 @@ class Plugin:
         kind = info["action"]
         st, s = self.state, self.settings
         if kind == "battery":
-            image = battery_image(st)
+            image = battery_image(st, self.muted)
             if info.get("image") != image:
                 info["image"] = image
                 await self.send("setImage", ctx, {"image": image, "target": 0})
@@ -460,11 +479,11 @@ class Plugin:
     async def press(self, ctx: str) -> None:
         info = self.contexts[ctx]
         kind, cfg, s = info["action"], info["settings"], self.settings
-        if kind == "battery":
+        if kind == "battery" and cfg.get("press") == "refresh":
             self.schedule_refresh()
             return
-        if kind == "mute":
-            mode = cfg.get("press", "toggle")
+        if kind in MUTE_KEYS:   # the battery key toggles the mic mute by default
+            mode = cfg.get("press", "toggle") if kind == "mute" else "toggle"
             if self.muted is None:
                 await self.refresh_mute()
             if mode == "ptt":
@@ -581,9 +600,11 @@ class Plugin:
                 "settings": payload.get("settings") or {},
                 "controller": payload.get("controller", "Keypad"),
             }
-            if kind == "mute":
+            if kind in MUTE_KEYS:
                 self.schedule_mute_refresh()
-            elif self.state is None and self.settings is None:
+            if kind == "mute":
+                return   # drawn once the mute state is known
+            if self.state is None and self.settings is None:
                 self.schedule_refresh()
             else:
                 await self.render(ctx)

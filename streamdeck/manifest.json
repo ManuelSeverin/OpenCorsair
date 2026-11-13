@@ -212,7 +212,7 @@
 			"UUID": "io.github.manuelseverin.opencorsair.battery",
 			"Name": "Battery",
 			"Icon": "icons/battery",
-			"Tooltip": "Show the headset battery level",
+			"Tooltip": "Show the headset battery level and mic mute; press to mute or unmute",
 			"PropertyInspectorPath": "pi/index.html",
 			"Controllers": [
 				"Keypad"
