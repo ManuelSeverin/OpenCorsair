@@ -127,7 +127,18 @@ const ACTIONS = {
 			["off", "Off"],
 		] },
 	],
-	battery: [],
+	battery: [
+		{ key: "press", label: "On press", type: "select", default: "toggle", options: [
+			["toggle", "Toggle mic mute"],
+			["refresh", "Read battery now"],
+		], hint: "The key shows the mic mute state either way." },
+		{ key: "sound", label: "Sound", type: "select", default: "", options: [
+			["", "Same as the tray"],
+			["soft", "Soft"],
+			["beeps", "Beeps"],
+			["off", "Off"],
+		], show: s => s.press !== "refresh" },
+	],
 };
 
 function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
